@@ -1,0 +1,33 @@
+{
+  "name": "mandate",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Mandate - AI-native grocery commerce system (Phase 0 foundation)",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run build:packages && npm run dev --workspaces --if-present",
+    "dev:api": "npm run build:packages && npm run dev -w @mandate/api",
+    "dev:web": "npm run build:packages && npm run dev -w @mandate/web",
+    "build:packages": "npm run build -w @mandate/types && npm run build -w @mandate/config",
+    "build": "npm run build:packages && npm run build -w @mandate/api && npm run build -w @mandate/web",
+    "test": "npm run build:packages && npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
+    "supabase:start": "npx supabase start",
+    "supabase:stop": "npx supabase stop",
+    "supabase:status": "npx supabase status",
+    "supabase:db:push": "npx supabase db push",
+    "supabase:db:reset": "npx supabase db reset",
+    "supabase:seed": "echo Seed file supabase/seed.sql is applied by supabase db reset locally only"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "supabase": "^2.33.9",
+    "typescript": "^5.8.2"
+  }
+}

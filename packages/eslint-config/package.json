@@ -1,0 +1,9 @@
+{
+  "name": "@mandate/eslint-config",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.js",
+  "files": [
+    "index.js"
+  ]
+}
