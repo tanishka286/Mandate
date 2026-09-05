@@ -359,7 +359,7 @@ export class BasketService {
         ? activeSelection.selection_id
         : null;
 
-    const quoteRow = await this.repository.insertQuote({
+    const quotePayload = {
       basket_id: basket.basket_id,
       session_id: basket.session_id,
       user_id: userId,
@@ -374,9 +374,28 @@ export class BasketService {
       applied_incentives_json: result.applied_incentives,
       catalog_fingerprint,
       incentive_fingerprint,
-      status: "CURRENT",
+      status: "CURRENT" as const,
+      request_id: requestId ?? null,
+    };
+
+    const reactivated = await this.repository.reactivateSupersededQuote({
+      basket_id: basket.basket_id,
+      quote_version: result.quote_version,
+      selection_id: selectionId,
+      gross_amount_minor: result.gross_amount_minor,
+      discount_amount_minor: result.discount_amount_minor,
+      final_payable_minor: result.final_payable_minor,
+      lines_json: result.lines,
+      applied_incentives_json: result.applied_incentives,
+      catalog_fingerprint,
+      incentive_fingerprint,
+      basket_state_version: basket.state_version,
       request_id: requestId ?? null,
     });
+
+    const quoteRow =
+      reactivated ??
+      (await this.repository.insertQuote(quotePayload));
 
     await this.auditService.recordFreshQuote(
       {

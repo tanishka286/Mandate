@@ -501,12 +501,15 @@ export class PolicyService {
         request_fingerprint: fingerprint,
       });
 
+      const sessionId = await this.repository.findBasketSessionId(input.basket_id);
+
       await this.auditService.recordPolicyDecision(
         {
           user_id: input.user_id,
           mandate_id: input.mandate_id,
           basket_id: input.basket_id,
           policy_decision_id: row.policy_decision_id,
+          session_id: sessionId,
           request_id: input.request_id,
         },
         {

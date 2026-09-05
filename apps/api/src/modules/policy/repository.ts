@@ -117,6 +117,22 @@ export class PolicyRepository {
 
     return (data as PolicyDecisionRow | null) ?? null;
   }
+
+  /** Resolve shopping session for basket-scoped audit correlation (Phase 10). */
+  async findBasketSessionId(basketId: string): Promise<string | null> {
+    const db = getSupabaseClient();
+    const { data, error } = await db
+      .from("basket")
+      .select("session_id")
+      .eq("basket_id", basketId)
+      .maybeSingle();
+
+    if (error) {
+      throw mapDatabaseError(error, "Failed to load basket session for policy audit");
+    }
+
+    return typeof data?.session_id === "string" ? data.session_id : null;
+  }
 }
 
 export function isUniqueConstraintConflict(error: unknown): boolean {

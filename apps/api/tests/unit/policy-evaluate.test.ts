@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { PolicyService } from "../../src/modules/policy/service.js";
 import type { PolicyRepository } from "../../src/modules/policy/repository.js";
+import { AuditService } from "../../src/modules/audit/service.js";
 import type {
   AuthoritativeSkuSnapshot,
   IncentivePort,
@@ -152,6 +153,7 @@ function createHarness(options: {
     findById: async () => null,
     findByUserIdempotencyKey: async (userId: string, key: string) =>
       byUserKey.get(`${userId}:${key}`) ?? null,
+    findBasketSessionId: async () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01",
   } as unknown as PolicyRepository;
 
   const mandateService = {
@@ -715,6 +717,29 @@ describe("PolicyService durable idempotency", () => {
       ),
     ).rejects.toMatchObject({ code: "MANDATE_INVALID" });
     expect(inserted).toHaveLength(1);
+  });
+});
+
+describe("PolicyService audit correlation", () => {
+  it("records POLICY_ALLOW with basket session_id for session audit trail", async () => {
+    const sessionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01";
+    const { service } = createHarness({});
+    const auditSpy = vi
+      .spyOn(AuditService.prototype, "recordPolicyDecision")
+      .mockResolvedValue(undefined);
+
+    await service.evaluate(baseRequest(), now);
+
+    expect(auditSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user_id: ownerId,
+        basket_id: basketId,
+        session_id: sessionId,
+      }),
+      expect.objectContaining({ decision: "ALLOW" }),
+    );
+
+    auditSpy.mockRestore();
   });
 });
 

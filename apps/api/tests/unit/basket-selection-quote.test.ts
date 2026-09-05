@@ -362,6 +362,47 @@ function createRepos(store: Store): {
           : q,
       );
     },
+    reactivateSupersededQuote: async (input: {
+      basket_id: string;
+      quote_version: string;
+      selection_id?: string | null;
+      gross_amount_minor: number;
+      discount_amount_minor: number;
+      final_payable_minor: number;
+      lines_json: unknown;
+      applied_incentives_json?: unknown;
+      catalog_fingerprint: string;
+      incentive_fingerprint: string;
+      basket_state_version: number;
+      request_id?: string | null;
+    }) => {
+      const idx = store.quotes.findIndex(
+        (q) =>
+          q.basket_id === input.basket_id &&
+          q.quote_version === input.quote_version &&
+          (q.status === "SUPERSEDED" || q.status === "STALE"),
+      );
+      if (idx < 0) {
+        return null;
+      }
+      const updated: BasketQuoteRow = {
+        ...store.quotes[idx]!,
+        status: "CURRENT",
+        superseded_at: null,
+        selection_id: input.selection_id ?? null,
+        gross_amount_minor: input.gross_amount_minor,
+        discount_amount_minor: input.discount_amount_minor,
+        final_payable_minor: input.final_payable_minor,
+        lines_json: input.lines_json,
+        applied_incentives_json: input.applied_incentives_json ?? [],
+        catalog_fingerprint: input.catalog_fingerprint,
+        incentive_fingerprint: input.incentive_fingerprint,
+        basket_state_version: input.basket_state_version,
+        request_id: input.request_id ?? null,
+      };
+      store.quotes[idx] = updated;
+      return updated;
+    },
     insertQuote: async (input: Record<string, unknown>) => {
       quoteSeq += 1;
       const row: BasketQuoteRow = {
@@ -635,6 +676,19 @@ describe("Phase 7 — BasketService selection & quote", () => {
     expect(quote.quote_version).toMatch(/^quote-[a-f0-9]{16}$/);
     expect(quote.basket_state_version).toBe(1);
     expect(quote.catalog_fingerprint).toHaveLength(24);
+  });
+
+  it("13b. identical re-quote reactivates superseded row (quote → checkout path)", async () => {
+    const first = await service.createFreshQuote(userA, basketValueId, {});
+    const second = await service.createFreshQuote(userA, basketValueId, {});
+    expect(second.quote_id).toBe(first.quote_id);
+    expect(second.quote_version).toBe(first.quote_version);
+    expect(
+      store.quotes.find((q) => q.quote_id === first.quote_id)?.status,
+    ).toBe("CURRENT");
+    expect(store.quotes.filter((q) => q.basket_id === basketValueId)).toHaveLength(
+      1,
+    );
   });
 
   it("14. stale quote detection", async () => {

@@ -429,6 +429,55 @@ export class BasketRepository {
     }
   }
 
+  /**
+   * Re-materialize an identical content-addressed quote_version after the prior
+   * CURRENT row was superseded (quote → policy → checkout happy path).
+   */
+  async reactivateSupersededQuote(input: {
+    basket_id: string;
+    quote_version: string;
+    selection_id?: string | null;
+    gross_amount_minor: number;
+    discount_amount_minor: number;
+    final_payable_minor: number;
+    lines_json: unknown;
+    applied_incentives_json?: unknown;
+    catalog_fingerprint: string;
+    incentive_fingerprint: string;
+    basket_state_version: number;
+    request_id?: string | null;
+  }): Promise<BasketQuoteRow | null> {
+    const db = getSupabaseClient();
+    const { data, error } = await db
+      .from("basket_quote")
+      .update({
+        status: "CURRENT",
+        superseded_at: null,
+        selection_id: input.selection_id ?? null,
+        gross_amount_minor: input.gross_amount_minor,
+        discount_amount_minor: input.discount_amount_minor,
+        final_payable_minor: input.final_payable_minor,
+        lines_json: input.lines_json,
+        applied_incentives_json: input.applied_incentives_json ?? [],
+        catalog_fingerprint: input.catalog_fingerprint,
+        incentive_fingerprint: input.incentive_fingerprint,
+        basket_state_version: input.basket_state_version,
+        request_id: input.request_id ?? null,
+      })
+      .eq("basket_id", input.basket_id)
+      .eq("quote_version", input.quote_version)
+      .in("status", ["SUPERSEDED", "STALE"])
+      .select(
+        "quote_id, basket_id, session_id, user_id, selection_id, optimization_run_id, quote_version, basket_state_version, currency, amount_kind, gross_amount_minor, discount_amount_minor, final_payable_minor, lines_json, applied_incentives_json, catalog_fingerprint, incentive_fingerprint, status, request_id, created_at, superseded_at",
+      )
+      .maybeSingle();
+
+    if (error) {
+      throw mapDatabaseError(error, "Failed to reactivate superseded basket quote");
+    }
+    return (data as BasketQuoteRow | null) ?? null;
+  }
+
   async insertQuote(input: {
     quote_id?: string;
     basket_id: string;
