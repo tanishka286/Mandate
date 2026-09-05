@@ -3,7 +3,12 @@ export { PolicyService } from "./service.js";
 export { PolicyRepository } from "./repository.js";
 export { policyRouter } from "./routes.js";
 export { buildPolicyRequestFingerprint } from "./fingerprint.js";
-export { FailClosedIncentiveAdapter } from "./incentive-adapter.js";
+export { FailClosedIncentiveAdapter, PersistedIncentiveAdapter } from "./incentive-adapter.js";
+export {
+  normalizeCatalogCategoryForPolicy,
+  isCatalogCategoryAllowedForMandate,
+  GROCERY_CATALOG_CATEGORY_CODES,
+} from "./category-normalization.js";
 export { SupabasePolicyCatalogAdapter } from "./catalog-adapter.js";
 export {
   PolicyRevalidationService,

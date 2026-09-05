@@ -290,10 +290,7 @@ async function ensureHostedSeamFixtures(): Promise<void> {
   if (mandateErr) throw mandateErr;
 
   const { error: mcErr } = await db.from("mandate_category").upsert(
-    [
-      { mandate_id: MANDATE_A, category: "grocery" },
-      { mandate_id: MANDATE_A, category: "dairy" },
-    ],
+    [{ mandate_id: MANDATE_A, category: "grocery" }],
     { onConflict: "mandate_id,category" },
   );
   if (mcErr) throw mcErr;
@@ -338,7 +335,7 @@ describe.skipIf(!hostedReady)(
           mandate_id: MANDATE_A,
           max_spend_minor: 100_000,
           max_per_item_minor: 30_000,
-          allowed_categories: ["grocery", "dairy"],
+          allowed_categories: ["grocery"],
           currency: "INR",
         },
         goal: { goal_text: "6 eggs" },

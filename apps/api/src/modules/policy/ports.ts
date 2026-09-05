@@ -47,8 +47,14 @@ export type IncentiveEvaluationResult =
  * Phase 5+ will implement real voucher/loyalty checks; until then adapters
  * must fail closed for any claimed incentive id.
  */
+export interface IncentiveEvaluationContext {
+  claimed_incentive_ids: readonly string[];
+  /** Authoritative gross from catalog prices before incentive discount. */
+  gross_amount_minor: number;
+}
+
 export interface IncentivePort {
-  evaluate(input: {
-    claimed_incentive_ids: readonly string[];
-  }): Promise<IncentiveEvaluationResult>;
+  evaluate(
+    input: IncentiveEvaluationContext,
+  ): Promise<IncentiveEvaluationResult>;
 }

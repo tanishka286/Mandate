@@ -7,7 +7,8 @@ import {
 } from "../cart/pricing.js";
 import { MandateService } from "../mandate/service.js";
 import type { MandateWithCategories } from "../mandate/schema.js";
-import { FailClosedIncentiveAdapter } from "./incentive-adapter.js";
+import { PersistedIncentiveAdapter } from "./incentive-adapter.js";
+import { isCatalogCategoryAllowedForMandate } from "./category-normalization.js";
 import { SupabasePolicyCatalogAdapter } from "./catalog-adapter.js";
 import { buildPolicyRequestFingerprint } from "./fingerprint.js";
 import type {
@@ -60,7 +61,7 @@ export class PolicyService {
     private readonly repository = new PolicyRepository(),
     private readonly mandateService = new MandateService(),
     private readonly catalog: PolicyCatalogPort = new SupabasePolicyCatalogAdapter(),
-    private readonly incentives: IncentivePort = new FailClosedIncentiveAdapter(),
+    private readonly incentives: IncentivePort = new PersistedIncentiveAdapter(),
     private readonly auditService = new AuditService(),
   ) {}
 
@@ -230,11 +231,15 @@ export class PolicyService {
       }
     }
 
-    // --- 2. Category authorization ---
-    const allowed = new Set(mandate.allowed_categories);
+    // --- 2. Category authorization (catalog code → policy category normalization) ---
     for (const line of input.lines) {
       const snap = bySku.get(line.sku_id)!;
-      if (!allowed.has(snap.category_code)) {
+      if (
+        !isCatalogCategoryAllowedForMandate(
+          snap.category_code,
+          mandate.allowed_categories,
+        )
+      ) {
         return this.persistAndReturn({
           input,
           idempotencyKey,
@@ -301,9 +306,35 @@ export class PolicyService {
       }
     }
 
-    // --- 5. Incentive validity ---
+    // --- 5. Incentive validity (requires authoritative gross for min-spend rules) ---
+    let grossForIncentives: number;
+    try {
+      const pricedForIncentives = calculateCartPricing(
+        input.lines.map((line) => {
+          const snap = bySku.get(line.sku_id)!;
+          return {
+            quantity: line.quantity,
+            price_minor: snap.price_minor,
+            currency: snap.currency,
+          };
+        }),
+      );
+      grossForIncentives = pricedForIncentives.gross_amount_minor;
+    } catch {
+      return this.persistAndReturn({
+        input,
+        idempotencyKey,
+        fingerprint,
+        decision: "DENY",
+        reason_code: "AMOUNT_CALCULATION_FAILED",
+        evaluatedAt,
+        amounts: { ...zeroMoney, max_spend_minor: maxSpend },
+      });
+    }
+
     const incentiveResult = await this.incentives.evaluate({
       claimed_incentive_ids: input.claimed_incentive_ids,
+      gross_amount_minor: grossForIncentives,
     });
     if (!incentiveResult.ok) {
       return this.persistAndReturn({

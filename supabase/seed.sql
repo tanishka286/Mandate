@@ -449,3 +449,156 @@ set product_id = excluded.product_id,
     captured_at = excluded.captured_at,
     expires_at = excluded.expires_at,
     created_at = excluded.created_at;
+
+-- Phase 10 Step 1 — Deterministic incentive fixtures (Doc 10 §4.2).
+-- Authoritative merchant incentive facts for demo and policy validation.
+insert into public.incentive (
+  incentive_id,
+  type,
+  name,
+  description,
+  status,
+  valid_from,
+  valid_until,
+  rules_json,
+  created_at,
+  updated_at
+)
+values
+  (
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01',
+    'VOUCHER',
+    'Grocery Saver ₹50',
+    'Meaningful current saving on everyday grocery baskets.',
+    'ACTIVE',
+    '2026-01-01T00:00:00+00:00',
+    '2026-12-31T23:59:59+00:00',
+    jsonb_build_object(
+      'fixture_code', 'VALID_MEANINGFUL_VOUCHER',
+      'benefit_identity', 'seed:voucher:meaningful-50',
+      'source_reference', 'seed:voucher:meaningful-50',
+      'threshold_minor', 0,
+      'discount_minor', 5000,
+      'minimum_spend_minor', 0,
+      'future_use_value_minor', null
+    ),
+    '2026-09-05T00:00:00+00:00',
+    '2026-09-05T00:00:00+00:00'
+  ),
+  (
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa02',
+    'VOUCHER',
+    'Snack Saver 5%',
+    'Low current saving with meaningful future utility (Doc 10 snack case).',
+    'ACTIVE',
+    '2026-01-01T00:00:00+00:00',
+    '2026-12-31T23:59:59+00:00',
+    jsonb_build_object(
+      'fixture_code', 'LOW_CURRENT_HIGH_FUTURE_VOUCHER',
+      'benefit_identity', 'seed:voucher:snack-5pct',
+      'source_reference', 'seed:voucher:snack-5pct',
+      'threshold_minor', 0,
+      'discount_minor', 500,
+      'minimum_spend_minor', 0,
+      'future_use_value_minor', 5000
+    ),
+    '2026-09-05T00:00:00+00:00',
+    '2026-09-05T00:00:00+00:00'
+  ),
+  (
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa03',
+    'VOUCHER',
+    'Expired Promo',
+    'Expired voucher fixture for DO_NOT_USE / policy invalidity.',
+    'EXPIRED',
+    '2025-01-01T00:00:00+00:00',
+    '2025-06-01T00:00:00+00:00',
+    jsonb_build_object(
+      'fixture_code', 'EXPIRED_VOUCHER',
+      'benefit_identity', 'seed:voucher:expired',
+      'source_reference', 'seed:voucher:expired',
+      'threshold_minor', 0,
+      'discount_minor', 2000,
+      'minimum_spend_minor', 0,
+      'future_use_value_minor', null
+    ),
+    '2025-01-01T00:00:00+00:00',
+    '2025-06-01T00:00:00+00:00'
+  ),
+  (
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa04',
+    'VOUCHER',
+    'Big Basket ₹30',
+    'Minimum-spend voucher — must not expand basket to unlock.',
+    'ACTIVE',
+    '2026-01-01T00:00:00+00:00',
+    '2026-12-31T23:59:59+00:00',
+    jsonb_build_object(
+      'fixture_code', 'MINIMUM_SPEND_VOUCHER',
+      'benefit_identity', 'seed:voucher:min-spend-500',
+      'source_reference', 'seed:voucher:min-spend-500',
+      'threshold_minor', 0,
+      'discount_minor', 3000,
+      'minimum_spend_minor', 50000,
+      'future_use_value_minor', null
+    ),
+    '2026-09-05T00:00:00+00:00',
+    '2026-09-05T00:00:00+00:00'
+  ),
+  (
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaab01',
+    'LOYALTY_REWARD',
+    'Grocery Points ₹100',
+    'Usable loyalty reward with meaningful current value.',
+    'ACTIVE',
+    '2026-01-01T00:00:00+00:00',
+    '2026-12-31T23:59:59+00:00',
+    jsonb_build_object(
+      'fixture_code', 'USABLE_LOYALTY_REWARD',
+      'benefit_identity', 'seed:loyalty:usable-100',
+      'source_reference', 'seed:loyalty:usable-100',
+      'value_kind', 'MONETARY',
+      'redeemable_value_minor', 10000,
+      'minimum_spend_minor', 0,
+      'consumable', true,
+      'future_use_value_minor', null
+    ),
+    '2026-09-05T00:00:00+00:00',
+    '2026-09-05T00:00:00+00:00'
+  ),
+  (
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaab02',
+    'LOYALTY_REWARD',
+    'Preserve Points',
+    'Loyalty reward where preservation is preferable.',
+    'ACTIVE',
+    '2026-01-01T00:00:00+00:00',
+    '2026-12-31T23:59:59+00:00',
+    jsonb_build_object(
+      'fixture_code', 'PRESERVE_LOYALTY_REWARD',
+      'benefit_identity', 'seed:loyalty:preserve',
+      'source_reference', 'seed:loyalty:preserve',
+      'value_kind', 'MONETARY',
+      'redeemable_value_minor', 500,
+      'minimum_spend_minor', 0,
+      'consumable', true,
+      'future_use_value_minor', 20000
+    ),
+    '2026-09-05T00:00:00+00:00',
+    '2026-09-05T00:00:00+00:00'
+  )
+on conflict (incentive_id) do update
+set type = excluded.type,
+    name = excluded.name,
+    description = excluded.description,
+    status = excluded.status,
+    valid_from = excluded.valid_from,
+    valid_until = excluded.valid_until,
+    rules_json = excluded.rules_json,
+    updated_at = timezone('utc', now());
+
+insert into public.schema_meta (key, value)
+values ('phase', '10-step1-incentive')
+on conflict (key) do update
+set value = excluded.value,
+    updated_at = timezone('utc', now());

@@ -370,6 +370,26 @@ describe("PolicyService.evaluate", () => {
     expect(result.reason_code).toBe("AMOUNT_CALCULATION_FAILED");
   });
 
+  it("evaluates incentives before MAX_SPEND (invalid incentive denies first)", async () => {
+    const { service } = createHarness({
+      mandate: { ...activeMandate, max_spend_minor: 1_000_000 },
+      incentivePort: {
+        evaluate: async () => ({
+          ok: false,
+          reason_code: "INCENTIVE_INVALID",
+        }),
+      },
+    });
+    const result = await service.evaluate(
+      baseRequest({
+        claimed_incentive_ids: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa03"],
+      }),
+      now,
+    );
+    expect(result.reason_code).toBe("INCENTIVE_INVALID");
+    expect(result.discount_amount_minor).toBe(0);
+  });
+
   it("DENY INCENTIVE_INVALID for a claimed unknown incentive id", async () => {
     const { service } = createHarness({
       incentivePort: {
@@ -458,6 +478,32 @@ describe("PolicyService.evaluate", () => {
   it("uses authoritative catalog category for category authorization", async () => {
     const { service } = createHarness({
       snapshots: [{ ...dairySku, category_code: "beverages" }],
+    });
+    const result = await service.evaluate(baseRequest(), now);
+    expect(result.reason_code).toBe("CATEGORY_NOT_ALLOWED");
+  });
+
+  it("normalizes dairy catalog code under Doc 10 grocery-only mandate", async () => {
+    const groceryMandate: MandateWithCategories = {
+      ...activeMandate,
+      allowed_categories: ["grocery"],
+    };
+    const { service } = createHarness({
+      mandate: groceryMandate,
+      snapshots: [dairySku],
+    });
+    const result = await service.evaluate(baseRequest(), now);
+    expect(result.decision).toBe("ALLOW");
+  });
+
+  it("denies household catalog code under grocery-only mandate", async () => {
+    const groceryMandate: MandateWithCategories = {
+      ...activeMandate,
+      allowed_categories: ["grocery"],
+    };
+    const { service } = createHarness({
+      mandate: groceryMandate,
+      snapshots: [{ ...dairySku, category_code: "household" }],
     });
     const result = await service.evaluate(baseRequest(), now);
     expect(result.reason_code).toBe("CATEGORY_NOT_ALLOWED");

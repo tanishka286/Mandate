@@ -49,6 +49,10 @@ function isHostedTarget(): boolean {
   }
 }
 
+function uniqueRazorpayOrderId(): string {
+  return `order_rzp_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+}
+
 describe("Hosted Supabase: Phase 8 Step 2 Payment Persistence Foundation", () => {
   const isTarget = isHostedTarget();
   let repo: PaymentsRepository;
@@ -207,16 +211,17 @@ describe("Hosted Supabase: Phase 8 Step 2 Payment Persistence Foundation", () =>
       expect(loaded?.policy_decision_id).toBe(policyDecisionId);
 
       // Verify update order status
+      const razorpayOrderId = uniqueRazorpayOrderId();
       const updated = await repo.updateOrderStatus(
         order.order_id,
         "PAYMENT_PENDING",
-        "order_rzp_123456",
+        razorpayOrderId,
       );
       expect(updated.status).toBe("PAYMENT_PENDING");
-      expect(updated.razorpay_order_id).toBe("order_rzp_123456");
+      expect(updated.razorpay_order_id).toBe(razorpayOrderId);
 
       // Verify find by razorpay_order_id
-      const byRzp = await repo.findOrderByRazorpayOrderId("order_rzp_123456");
+      const byRzp = await repo.findOrderByRazorpayOrderId(razorpayOrderId);
       expect(byRzp?.order_id).toBe(order.order_id);
     });
 
