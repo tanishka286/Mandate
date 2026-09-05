@@ -69,6 +69,7 @@ const envSchema = z.object({
   RAZORPAY_KEY_ID: z.string().optional().default(""),
   RAZORPAY_KEY_SECRET: z.string().optional().default(""),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional().default(""),
+  RAZORPAY_ENV: z.enum(["test"]).default("test"),
 
   JWT_SECRET: z.string().optional().default(""),
 });
@@ -102,4 +103,13 @@ export function getEnv(): Env {
 /** True when Supabase credentials are present (required for DB-backed operations). */
 export function isSupabaseConfigured(env: Env = getEnv()): boolean {
   return Boolean(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+/** True when Razorpay Test Mode credentials are configured. */
+export function isRazorpayTestConfigured(env: Env = getEnv()): boolean {
+  return Boolean(
+    env.RAZORPAY_KEY_ID &&
+      env.RAZORPAY_KEY_SECRET &&
+      env.RAZORPAY_ENV === "test",
+  );
 }

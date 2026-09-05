@@ -272,3 +272,102 @@ export interface SessionBasketsData {
     "order_created" | "payment_created" | "policy_decision"
   > | null;
 }
+
+/** Phase 8 canonical order states. */
+export type OrderState =
+  | "CREATED"
+  | "PAYMENT_PENDING"
+  | "PAYMENT_VERIFIED"
+  | "PAYMENT_FAILED"
+  | "PAYMENT_CANCELLED"
+  | "PAYMENT_EXPIRED";
+
+/** Phase 8 canonical payment states. */
+export type PaymentState =
+  | "PAYMENT_PENDING"
+  | "VERIFIED"
+  | "FAILED"
+  | "CANCELLED"
+  | "EXPIRED";
+
+/** Phase 8 Razorpay webhook processing states. */
+export type WebhookProcessingStatus =
+  | "RECEIVED"
+  | "PROCESSING"
+  | "PROCESSED"
+  | "FAILED"
+  | "IGNORED";
+
+/** Phase 8 canonical application Order. */
+export interface Order {
+  order_id: string;
+  user_id: string;
+  session_id: string;
+  mandate_id: string;
+  basket_id: string;
+  policy_decision_id: string;
+  status: OrderState;
+  gross_amount_minor: MoneyMinor;
+  discount_amount_minor: MoneyMinor;
+  final_payable_minor: MoneyMinor;
+  currency: "INR";
+  razorpay_order_id: string | null;
+  created_at: IsoUtcTimestamp;
+  updated_at: IsoUtcTimestamp;
+}
+
+/** Phase 8 canonical Payment entity. */
+export interface Payment {
+  payment_id: string;
+  order_id: string;
+  razorpay_payment_id: string | null;
+  status: PaymentState;
+  amount_minor: MoneyMinor;
+  currency: "INR";
+  method: string | null;
+  verified_at: IsoUtcTimestamp | null;
+  failure_code: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: IsoUtcTimestamp;
+  updated_at: IsoUtcTimestamp;
+}
+
+/** Phase 8 durable checkout idempotency record. */
+export interface CheckoutIdempotencyRecord {
+  idempotency_id: string;
+  user_id: string;
+  idempotency_key: string;
+  request_fingerprint: string;
+  order_id: string | null;
+  response_json: Record<string, unknown> | null;
+  created_at: IsoUtcTimestamp;
+  updated_at: IsoUtcTimestamp;
+}
+
+/** Phase 8 durable Razorpay webhook event record. */
+export interface RazorpayWebhookEventRecord {
+  webhook_event_id: string;
+  event_id: string;
+  event_type: string;
+  payload_hash: string | null;
+  received_at: IsoUtcTimestamp;
+  processed_at: IsoUtcTimestamp | null;
+  processing_status: WebhookProcessingStatus;
+  error_code: string | null;
+  payload_json: Record<string, unknown> | null;
+  created_at: IsoUtcTimestamp;
+  updated_at: IsoUtcTimestamp;
+}
+
+/** Phase 8 checkout service result for frontend/API handoff. */
+export interface CheckoutResult {
+  order_id: string;
+  razorpay_order_id: string;
+  amount_minor: MoneyMinor;
+  currency: "INR";
+  razorpay_key_id: string;
+  status: "PAYMENT_PENDING";
+  policy_decision_id: string;
+  quote_version: string;
+  request_id: string;
+}
