@@ -64,7 +64,7 @@ export const extractRequirementsTool: AgentToolHandler = async (
   try {
     const parsed = parseOrThrow(extractRequirementsArgsSchema, args);
     const intent = toSyntheticIntent(parsed);
-    const result = context.extractor.extract(intent);
+    const result = await context.extractor.extract(intent);
     const validated = validateExtractionResult(result);
 
     return {

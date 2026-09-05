@@ -1,5 +1,5 @@
 import { CatalogService } from "../catalog/service.js";
-import { DeterministicRequirementExtractor } from "../requirements/deterministic-extractor.js";
+import { createRequirementExtractor } from "../requirements/create-extractor.js";
 import type { RequirementExtractor } from "../requirements/extractor.js";
 import { ResearchService } from "../research/service.js";
 import { PolicyService } from "../policy/service.js";
@@ -83,7 +83,8 @@ export class AgentService {
 
     this.registry = options.registry ?? createAllowlistedToolRegistry();
     this.context = {
-      extractor: options.extractor ?? new DeterministicRequirementExtractor(),
+      extractor:
+        options.extractor ?? createRequirementExtractor(env),
       catalog: options.catalog ?? new CatalogService(),
       research: options.research ?? new ResearchService(),
       policy: options.policy ?? new PolicyService(),

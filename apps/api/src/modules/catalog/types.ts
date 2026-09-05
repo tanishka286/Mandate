@@ -111,6 +111,7 @@ export interface CatalogSearchRow {
   product: {
     product_id: string;
     name: string;
+    brand: string | null;
     status: string;
     category: {
       code: string;

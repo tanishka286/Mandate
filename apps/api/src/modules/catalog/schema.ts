@@ -258,6 +258,10 @@ export const catalogSearchItemSchema = z.object({
   pack_unit: z.string().min(1),
   price_minor: priceMinorSchema,
   currency: currencySchema,
+  category_code: z.string().min(1),
+  product_status: productStatusSchema,
+  sku_status: skuStatusSchema,
+  brand: z.string().min(1).nullable(),
   /** null when no stock row exists; 0 means out of stock. Never invent. */
   stock_available: availableQuantitySchema.nullable(),
 });

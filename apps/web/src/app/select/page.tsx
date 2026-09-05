@@ -11,6 +11,7 @@ export default async function SelectPage({
     sessionId?: string;
     token?: string;
     mandateId?: string;
+    goalText?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -21,6 +22,7 @@ export default async function SelectPage({
         sessionId={params.sessionId}
         token={params.token}
         mandateId={params.mandateId}
+        goalText={params.goalText}
       />
     </main>
   );

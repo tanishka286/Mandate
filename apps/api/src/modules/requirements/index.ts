@@ -6,6 +6,8 @@ export {
   requirementsRouter,
 } from "./routes.js";
 export { DeterministicRequirementExtractor } from "./deterministic-extractor.js";
+export { LlmRequirementExtractor } from "./llm-extractor.js";
+export { createRequirementExtractor } from "./create-extractor.js";
 export type { RequirementExtractor } from "./extractor.js";
 export {
   REQUIREMENT_STATUSES,

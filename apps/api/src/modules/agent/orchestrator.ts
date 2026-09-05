@@ -2,6 +2,7 @@ import { getEnv } from "../../config/env.js";
 import { AppError } from "../../shared/errors/index.js";
 import { parseOrThrow } from "../../shared/validation/index.js";
 import type { StructuredLlmProvider } from "./ai-adapter.js";
+import type { CatalogSearchItem } from "../catalog/schema.js";
 import {
   agentPlanningRequestSchema,
   agentPlanningResultSchema,
@@ -23,6 +24,12 @@ import {
 import type { AgentToolContext, AgentToolRegistry } from "./tools/registry.js";
 import type { OptimizationToolData } from "./tools/optimization-tool.js";
 import type { BestValueInput } from "../optimization/index.js";
+import {
+  buildOptimizationInputFromCatalog,
+  type RequirementCatalogSlot,
+} from "../optimization/catalog-input-assembler.js";
+import type { ExtractedRequirementDraft } from "../requirements/extraction-schema.js";
+import type { QualityEvidence } from "../research/schema.js";
 import {
   buildMaterializeInputFromOptimization,
   toPersistedOptimizationRef,
@@ -182,54 +189,40 @@ export class AgentOrchestrator {
 
       if (!request.skip_catalog_research) {
         stage = "CATALOG_RESEARCH";
-        for (const draft of requirements.requirements) {
-          const search = await this.deps.registry.invoke(
-            "search_catalog",
-            { q: draft.item_name, limit: 10 },
-            this.deps.context,
-          );
-          record(search);
-          if (search.status === "OK" && search.data) {
-            const items =
-              (search.data as { items?: Array<{ product_id: string }> })
-                .items ?? [];
-            stage = "QUALITY_RESEARCH";
-            for (const item of items.slice(0, 3)) {
-              const evidence = await this.deps.registry.invoke(
-                "get_quality_evidence",
-                { product_id: item.product_id },
-                this.deps.context,
-              );
-              record(evidence);
-              if (evidence.status === "OK" && evidence.data) {
-                const evidenceData = evidence.data as {
-                  evidence?: Array<{
-                    evidence_id: string;
-                    source_type?: string;
-                    quality_signal?: string | null;
-                    confidence?: number | null;
-                  }>;
-                };
-                const itemsList = evidenceData.evidence ?? [];
-                await this.auditService.recordProductResearched(
-                  {
-                    user_id: request.user_id,
-                    session_id: request.session_id,
-                    agent_run_id: request.agent_run_id,
-                    mandate_id: mandate.mandate_id,
-                    request_id: request.request_id,
-                  },
-                  {
-                    product_id: item.product_id,
-                    evidence_ids: itemsList.map((e) => e.evidence_id),
-                    quality_signal: itemsList[0]?.quality_signal ?? null,
-                    confidence: itemsList[0]?.confidence ?? null,
-                    source_type: itemsList[0]?.source_type ?? null,
-                  },
-                );
-              }
-            }
+        const catalogSlots = await this.runCatalogResearchPhase({
+          requirements: requirements.requirements,
+          registry: this.deps.registry,
+          context: this.deps.context,
+          record,
+          auditCtx: {
+            user_id: request.user_id,
+            session_id: request.session_id,
+            agent_run_id: request.agent_run_id,
+            mandate_id: mandate.mandate_id,
+            request_id: request.request_id,
+          },
+          onStage: (next) => {
+            stage = next;
+          },
+        });
+
+        if (!optimizationInput) {
+          const assembly = buildOptimizationInputFromCatalog({
+            slots: catalogSlots,
+            budget_minor:
+              request.goal.budget_minor ?? mandate.max_spend_minor,
+            allowed_categories: mandate.allowed_categories,
+          });
+          if (assembly.status === "CLARIFICATION_REQUIRED") {
+            requirements = {
+              status: "CLARIFICATION_REQUIRED",
+              requirements: [],
+              assumptions: requirements.assumptions,
+              clarification: assembly.clarification,
+            };
+            return finish("CLARIFICATION_REQUIRED", "CLARIFICATION_REQUIRED");
           }
+          optimizationInput = assembly.input;
         }
       }
 
@@ -356,28 +349,34 @@ export class AgentOrchestrator {
               optimization_run_id: persisted_baskets?.optimization_run_id ?? null,
               request_id: request.request_id,
             };
+            const auditPromises: Promise<unknown>[] = [];
             for (const evaluation of incentiveData.vouchers?.evaluations ?? []) {
               const incentiveId =
                 evaluation.incentive_id ?? evaluation.voucher_id ?? "unknown";
-              await this.auditService.recordVoucherEvaluated(auditCtx, {
-                incentive_id: incentiveId,
-                decision: evaluation.decision ?? "UNKNOWN",
-                actual_saving_minor: evaluation.actual_saving_minor ?? null,
-                future_value_minor: evaluation.future_value_minor ?? null,
-                reason: evaluation.reason ?? null,
-              });
+              auditPromises.push(
+                this.auditService.recordVoucherEvaluated(auditCtx, {
+                  incentive_id: incentiveId,
+                  decision: evaluation.decision ?? "UNKNOWN",
+                  actual_saving_minor: evaluation.actual_saving_minor ?? null,
+                  future_value_minor: evaluation.future_value_minor ?? null,
+                  reason: evaluation.reason ?? null,
+                }),
+              );
             }
             for (const evaluation of incentiveData.loyalty?.evaluations ?? []) {
               const incentiveId =
                 evaluation.incentive_id ?? evaluation.reward_id ?? "unknown";
-              await this.auditService.recordLoyaltyEvaluated(auditCtx, {
-                incentive_id: incentiveId,
-                decision: evaluation.decision ?? "UNKNOWN",
-                actual_saving_minor: evaluation.actual_saving_minor ?? null,
-                future_value_minor: evaluation.future_value_minor ?? null,
-                reason: evaluation.reason ?? null,
-              });
+              auditPromises.push(
+                this.auditService.recordLoyaltyEvaluated(auditCtx, {
+                  incentive_id: incentiveId,
+                  decision: evaluation.decision ?? "UNKNOWN",
+                  actual_saving_minor: evaluation.actual_saving_minor ?? null,
+                  future_value_minor: evaluation.future_value_minor ?? null,
+                  reason: evaluation.reason ?? null,
+                }),
+              );
             }
+            await Promise.all(auditPromises);
           }
         }
 
@@ -473,10 +472,130 @@ export class AgentOrchestrator {
     }
   }
 
+  private async runCatalogResearchPhase(args: {
+    requirements: ExtractedRequirementDraft[];
+    registry: AgentToolRegistry;
+    context: AgentToolContext;
+    record: (result: ToolResult) => void;
+    auditCtx: {
+      user_id: string;
+      session_id: string;
+      agent_run_id: string;
+      mandate_id: string;
+      request_id: string;
+    };
+    onStage: (stage: AgentStage) => void;
+  }): Promise<RequirementCatalogSlot[]> {
+    const searchResults = await Promise.all(
+      args.requirements.map(async (draft) => {
+        const search = await args.registry.invoke(
+          "search_catalog",
+          { q: draft.item_name, limit: 10 },
+          args.context,
+        );
+        args.record(search);
+        const items =
+          search.status === "OK"
+            ? ((search.data as { items?: CatalogSearchItem[] })?.items ?? [])
+            : [];
+        return { draft, items };
+      }),
+    );
+
+    args.onStage("QUALITY_RESEARCH");
+
+    const productIds = new Set<string>();
+    for (const { items } of searchResults) {
+      for (const item of items.slice(0, 3)) {
+        productIds.add(item.product_id);
+      }
+    }
+
+    const evidenceRowsByProduct = new Map<string, QualityEvidence[]>();
+    await Promise.all(
+      [...productIds].map(async (productId) => {
+        const evidence = await args.registry.invoke(
+          "get_quality_evidence",
+          { product_id: productId },
+          args.context,
+        );
+        args.record(evidence);
+        const rows =
+          await args.context.research.listCurrentEvidenceByProductId(productId);
+        evidenceRowsByProduct.set(productId, rows);
+
+        if (evidence.status === "OK" && evidence.data) {
+          const evidenceData = evidence.data as {
+            agent_views?: Array<{
+              evidence_id: string;
+              quality_signal?: string | null;
+              confidence?: number | null;
+              source_type?: string | null;
+            }>;
+          };
+          const views = evidenceData.agent_views ?? [];
+          await this.auditService.recordProductResearched(args.auditCtx, {
+            product_id: productId,
+            evidence_ids: views.map((v) => v.evidence_id),
+            quality_signal: views[0]?.quality_signal ?? null,
+            confidence: views[0]?.confidence ?? null,
+            source_type: views[0]?.source_type ?? null,
+          });
+        }
+      }),
+    );
+
+    return searchResults.map(({ draft, items }) => {
+      const slotEvidence = new Map<string, readonly QualityEvidence[]>();
+      for (const item of items) {
+        if (!slotEvidence.has(item.product_id)) {
+          slotEvidence.set(
+            item.product_id,
+            evidenceRowsByProduct.get(item.product_id) ?? [],
+          );
+        }
+      }
+      return {
+        draft,
+        searchItems: items,
+        evidenceByProductId: slotEvidence,
+      };
+    });
+  }
+
+  private buildDeterministicRecommendation(
+    optimization: OptimizationToolData,
+    _goalText: string,
+  ): AgentRecommendation {
+    const recommendedType =
+      optimization.recommendation.feasible === true
+        ? optimization.recommendation.recommended_basket_type
+        : null;
+
+    return parseOrThrow(agentRecommendationSchema, {
+      recommended_basket_type: recommendedType,
+      summary:
+        recommendedType != null
+          ? `Recommend ${recommendedType} based on backend comparison.`
+          : "No feasible basket recommendation.",
+      explanation:
+        optimization.recommendation.feasible === true
+          ? (optimization.recommendation.rationale ??
+            "Backend comparison completed.")
+          : "Backend optimization found no feasible baskets.",
+      tradeoffs: [],
+      authorization: null,
+    });
+  }
+
   private async synthesizeRecommendation(
     optimization: OptimizationToolData,
     goalText: string,
   ): Promise<AgentRecommendation> {
+    if (getEnv().AGENT_SKIP_LLM_RECOMMENDATION) {
+      return this.buildDeterministicRecommendation(optimization, goalText);
+    }
+
     const recommendedType =
       optimization.recommendation.feasible === true
         ? optimization.recommendation.recommended_basket_type
@@ -516,20 +635,7 @@ export class AgentOrchestrator {
         authorization: null,
       });
     } catch {
-      return parseOrThrow(agentRecommendationSchema, {
-        recommended_basket_type: recommendedType,
-        summary:
-          recommendedType != null
-            ? `Recommend ${recommendedType} based on backend comparison.`
-            : "No feasible basket recommendation.",
-        explanation:
-          optimization.recommendation.feasible === true
-            ? (optimization.recommendation.rationale ??
-              "Backend comparison completed.")
-            : "Backend optimization found no feasible baskets.",
-        tradeoffs: [],
-        authorization: null,
-      });
+      return this.buildDeterministicRecommendation(optimization, goalText);
     }
   }
 }

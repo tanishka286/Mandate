@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseOrThrow } from "../../../shared/validation/index.js";
+import { serializeEvidenceSummaryAsData } from "../../research/evidence-trust-boundary.js";
 import { toAgentEvidenceView } from "../../research/evidence-trust-boundary.js";
 import type { AgentToolHandler } from "./registry.js";
 
@@ -37,10 +38,19 @@ export const getQualityEvidenceTool: AgentToolHandler = async (
 ) => {
   try {
     const { product_id } = parseOrThrow(getQualityEvidenceArgsSchema, args);
-    const list = await context.research.getProductEvidence(product_id);
     const current = await context.research.listCurrentEvidenceByProductId(
       product_id,
     );
+
+    const list = {
+      evidence: current.map((item) => ({
+        evidence_id: item.evidence_id,
+        source_type: item.source_type,
+        summary: serializeEvidenceSummaryAsData(item.summary),
+        quality_signal: item.quality_signal,
+        confidence: item.confidence,
+      })),
+    };
 
     const views = current.map((evidence) => {
       const view = toAgentEvidenceView(evidence);

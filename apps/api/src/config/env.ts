@@ -9,6 +9,11 @@ import {
   DEFAULT_OLLAMA_MODEL,
   DEFAULT_AGENT_MAX_RECOVERY_ATTEMPTS,
   DEFAULT_AGENT_LLM_MAX_RETRIES,
+  DEFAULT_OLLAMA_REQUEST_TIMEOUT_MS,
+  DEFAULT_OLLAMA_KEEP_ALIVE,
+  DEFAULT_OLLAMA_STRUCTURED_NUM_PREDICT,
+  DEFAULT_PLANNING_REQUIREMENT_MODE,
+  PLANNING_REQUIREMENT_MODES,
 } from "@mandate/config";
 
 /**
@@ -46,6 +51,52 @@ const envSchema = z.object({
 
   OLLAMA_BASE_URL: z.string().url().default(DEFAULT_OLLAMA_BASE_URL),
   OLLAMA_MODEL: z.string().default(DEFAULT_OLLAMA_MODEL),
+
+  /** Bounded HTTP timeout for Ollama generate calls (prevents indefinite hangs). */
+  OLLAMA_REQUEST_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(600_000)
+    .default(DEFAULT_OLLAMA_REQUEST_TIMEOUT_MS),
+
+  /**
+   * Ollama keep_alive passed on generate requests (e.g. "30m", "-1").
+   * Keeps the model loaded during demo sessions — never use keep_alive: 0 in product flows.
+   */
+  OLLAMA_KEEP_ALIVE: z.string().min(1).default(DEFAULT_OLLAMA_KEEP_ALIVE),
+
+  /** Max output tokens for structured LLM JSON (requirement extraction). */
+  OLLAMA_STRUCTURED_NUM_PREDICT: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(4096)
+    .default(DEFAULT_OLLAMA_STRUCTURED_NUM_PREDICT),
+
+  /**
+   * Requirement extraction mode for session planning.
+   * Defaults to deterministic in test, llm otherwise (see resolvePlanningRequirementMode).
+   */
+  PLANNING_REQUIREMENT_MODE: z
+    .enum(PLANNING_REQUIREMENT_MODES)
+    .optional(),
+
+  /**
+   * When true, planning skips synchronous Qwen recommendation prose.
+   * Deterministic backend recommendation remains authoritative.
+   */
+  AGENT_SKIP_LLM_RECOMMENDATION: z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === "") {
+        return true;
+      }
+      if (typeof value === "boolean") {
+        return value;
+      }
+      return String(value).toLowerCase() !== "false";
+    }, z.boolean())
+    .default(true),
 
   /**
    * Bounded policy-denial recovery attempts for the internal agent orchestrator.
@@ -112,4 +163,14 @@ export function isRazorpayTestConfigured(env: Env = getEnv()): boolean {
       env.RAZORPAY_KEY_SECRET &&
       env.RAZORPAY_ENV === "test",
   );
+}
+
+/** Resolved planning requirement mode (test defaults to deterministic). */
+export function resolvePlanningRequirementMode(
+  env: Env = getEnv(),
+): "llm" | "deterministic" {
+  if (env.PLANNING_REQUIREMENT_MODE) {
+    return env.PLANNING_REQUIREMENT_MODE;
+  }
+  return env.NODE_ENV === "test" ? "deterministic" : DEFAULT_PLANNING_REQUIREMENT_MODE;
 }

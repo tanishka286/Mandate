@@ -15,6 +15,7 @@ const eggRows: CatalogSearchRow[] = [
     product: {
       product_id: "22222222-2222-4222-8222-222222222201",
       name: "Farm Eggs",
+      brand: "FarmFresh",
       status: "ACTIVE",
       category: { code: "dairy" },
     },
@@ -31,6 +32,7 @@ const eggRows: CatalogSearchRow[] = [
     product: {
       product_id: "22222222-2222-4222-8222-222222222201",
       name: "Farm Eggs",
+      brand: "FarmFresh",
       status: "ACTIVE",
       category: { code: "dairy" },
     },

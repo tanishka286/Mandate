@@ -70,7 +70,7 @@ export class RequirementsService {
       );
     }
 
-    const extraction = this.extractor.extract(intent);
+    const extraction = await this.extractor.extract(intent);
 
     if (extraction.status === "CLARIFICATION_REQUIRED") {
       return parseOrThrow(requirementExtractionResponseDataSchema, {

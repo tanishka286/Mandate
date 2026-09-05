@@ -111,7 +111,7 @@ function buildService(options: {
   } as unknown as SessionsRepository;
 
   const extractor: RequirementExtractor = {
-    extract: () =>
+    extract: async () =>
       options.extraction ?? {
         status: "SUCCESS",
         requirements: [

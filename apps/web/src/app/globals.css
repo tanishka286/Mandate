@@ -13,5 +13,11 @@ body {
   min-height: 100vh;
   background: radial-gradient(ellipse at top, #1a242e 0%, var(--mandate-bg) 55%);
   color: var(--mandate-fg);
-  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  font-family: var(--font-ibm-plex-sans), "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:focus-visible {
+  outline: none;
 }

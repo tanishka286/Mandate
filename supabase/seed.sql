@@ -81,6 +81,38 @@ values
     '11111111-1111-4111-8111-111111111101',
     'SelectFarm',
     'ACTIVE'
+  ),
+  (
+    '22222222-2222-4222-8222-222222222207',
+    'Basmati Rice',
+    'Long-grain basmati rice for everyday meals.',
+    '11111111-1111-4111-8111-111111111102',
+    'GrainCo',
+    'ACTIVE'
+  ),
+  (
+    '22222222-2222-4222-8222-222222222208',
+    'Fresh Paneer',
+    'Soft cottage cheese for Indian cooking.',
+    '11111111-1111-4111-8111-111111111101',
+    'DairyLand',
+    'ACTIVE'
+  ),
+  (
+    '22222222-2222-4222-8222-222222222209',
+    'Whole Wheat Chapati',
+    'Ready-to-cook whole wheat chapati.',
+    '11111111-1111-4111-8111-111111111102',
+    'BakeHouse',
+    'ACTIVE'
+  ),
+  (
+    '22222222-2222-4222-8222-222222222210',
+    'Garden Salad Mix',
+    'Fresh mixed salad greens.',
+    '11111111-1111-4111-8111-111111111103',
+    'GreenLeaf',
+    'ACTIVE'
   )
 on conflict (product_id) do update
 set name = excluded.name,
@@ -182,6 +214,56 @@ values
     4200,
     'INR',
     'ACTIVE'
+  ),
+  (
+    '33333333-3333-4333-8333-333333333309',
+    '22222222-2222-4222-8222-222222222207',
+    'BASMATI-RICE-1KG',
+    1,
+    'kg',
+    7000,
+    'INR',
+    'ACTIVE'
+  ),
+  (
+    '33333333-3333-4333-8333-333333333310',
+    '22222222-2222-4222-8222-222222222208',
+    'PANEER-500G',
+    0.5,
+    'kg',
+    9000,
+    'INR',
+    'ACTIVE'
+  ),
+  (
+    '33333333-3333-4333-8333-333333333311',
+    '22222222-2222-4222-8222-222222222208',
+    'PANEER-PREMIUM-500G',
+    0.5,
+    'kg',
+    11000,
+    'INR',
+    'ACTIVE'
+  ),
+  (
+    '33333333-3333-4333-8333-333333333312',
+    '22222222-2222-4222-8222-222222222209',
+    'CHAPATI-5PK',
+    5,
+    'pieces',
+    3500,
+    'INR',
+    'ACTIVE'
+  ),
+  (
+    '33333333-3333-4333-8333-333333333313',
+    '22222222-2222-4222-8222-222222222210',
+    'SALAD-1KG',
+    1,
+    'kg',
+    5500,
+    'INR',
+    'ACTIVE'
   )
 on conflict (sku_code) do update
 set product_id = excluded.product_id,
@@ -203,7 +285,12 @@ values
   ('33333333-3333-4333-8333-333333333305', 35),  -- TOMATO-SAUCE-400G
   ('33333333-3333-4333-8333-333333333306', 18),  -- FRESH-MILK-1L
   ('33333333-3333-4333-8333-333333333307', 0),   -- SANDWICH-BREAD-400G (OOS)
-  ('33333333-3333-4333-8333-333333333308', 30)   -- SELECT-EGGS-6 (₹42, good-quality 6-pack)
+  ('33333333-3333-4333-8333-333333333308', 30),   -- SELECT-EGGS-6 (₹42, good-quality 6-pack)
+  ('33333333-3333-4333-8333-333333333309', 50),   -- BASMATI-RICE-1KG
+  ('33333333-3333-4333-8333-333333333310', 40),   -- PANEER-500G
+  ('33333333-3333-4333-8333-333333333311', 30),   -- PANEER-PREMIUM-500G
+  ('33333333-3333-4333-8333-333333333312', 60),   -- CHAPATI-5PK
+  ('33333333-3333-4333-8333-333333333313', 35)    -- SALAD-1KG
 on conflict (sku_id) do update
 set available_quantity = excluded.available_quantity,
     updated_at = timezone('utc', now());
@@ -437,6 +524,71 @@ values
     '2025-01-01T00:00:00+00:00',
     '2025-06-01T00:00:00+00:00',
     '2025-01-01T00:00:00+00:00'
+  ),
+  (
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee09',
+    '22222222-2222-4222-8222-222222222207',
+    '33333333-3333-4333-8333-333333333309',
+    'SEEDED_REVIEW_SUMMARY',
+    'seed:quality:rice-good',
+    'Consistent positive quality signals for everyday basmati rice.',
+    'GOOD',
+    0.82,
+    '2026-09-05T08:00:00+00:00',
+    null,
+    '2026-09-05T08:00:00+00:00'
+  ),
+  (
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee10',
+    '22222222-2222-4222-8222-222222222208',
+    '33333333-3333-4333-8333-333333333310',
+    'SEEDED_REVIEW_SUMMARY',
+    'seed:quality:paneer-good',
+    'Generally positive quality signals for everyday paneer.',
+    'GOOD',
+    0.80,
+    '2026-09-05T08:30:00+00:00',
+    null,
+    '2026-09-05T08:30:00+00:00'
+  ),
+  (
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee11',
+    '22222222-2222-4222-8222-222222222208',
+    '33333333-3333-4333-8333-333333333311',
+    'SEEDED_REVIEW_SUMMARY',
+    'seed:quality:paneer-premium',
+    'Strong positive quality signals for premium paneer.',
+    'PREMIUM',
+    0.88,
+    '2026-09-05T09:00:00+00:00',
+    null,
+    '2026-09-05T09:00:00+00:00'
+  ),
+  (
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee12',
+    '22222222-2222-4222-8222-222222222209',
+    '33333333-3333-4333-8333-333333333312',
+    'SEEDED_REVIEW_SUMMARY',
+    'seed:quality:chapati-good',
+    'Positive quality signals for whole wheat chapati.',
+    'GOOD',
+    0.78,
+    '2026-09-05T09:30:00+00:00',
+    null,
+    '2026-09-05T09:30:00+00:00'
+  ),
+  (
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee13',
+    '22222222-2222-4222-8222-222222222210',
+    '33333333-3333-4333-8333-333333333313',
+    'SEEDED_REVIEW_SUMMARY',
+    'seed:quality:salad-acceptable',
+    'Acceptable quality signals for mixed salad greens.',
+    'ACCEPTABLE',
+    0.72,
+    '2026-09-05T10:00:00+00:00',
+    null,
+    '2026-09-05T10:00:00+00:00'
   )
 on conflict (evidence_id) do update
 set product_id = excluded.product_id,

@@ -47,6 +47,10 @@ describe("catalog search schema", () => {
       pack_unit: "pieces",
       price_minor: 1200,
       currency: "INR" as const,
+      category_code: "dairy",
+      product_status: "ACTIVE" as const,
+      sku_status: "ACTIVE" as const,
+      brand: "FarmFresh",
     };
     expect(
       catalogSearchItemSchema.parse({ ...base, stock_available: null })
@@ -69,6 +73,10 @@ describe("catalog search schema", () => {
         pack_unit: "pieces",
         price_minor: 12.5,
         currency: "INR",
+        category_code: "dairy",
+        product_status: "ACTIVE",
+        sku_status: "ACTIVE",
+        brand: null,
         stock_available: 1,
       }),
     ).toThrow();
@@ -86,6 +94,10 @@ describe("catalog search schema", () => {
           pack_unit: "pieces",
           price_minor: 1200,
           currency: "INR",
+          category_code: "dairy",
+          product_status: "ACTIVE",
+          sku_status: "ACTIVE",
+          brand: "FarmFresh",
           stock_available: 48,
         },
       ],

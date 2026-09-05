@@ -1,9 +1,11 @@
 import { apiConfig } from "@/config/api";
+import { PolicyEvaluationDeniedError } from "@/lib/policy-errors";
 import type {
   ApiSuccessResponse,
   BasketQuoteData,
   BasketSelectionData,
   HealthData,
+  ProductDetail,
   SessionAuditTrailData,
   SessionBasketsData,
 } from "@mandate/types";
@@ -72,6 +74,7 @@ export interface ApiErrorBody {
   error?: {
     code?: string;
     message?: string;
+    details?: Record<string, unknown>;
   };
 }
 
@@ -101,6 +104,87 @@ async function parseApiError(res: Response): Promise<Error> {
     // ignore parse errors
   }
   return new Error(message);
+}
+
+async function parsePolicyEvaluateError(res: Response): Promise<Error> {
+  let message = `Request failed: ${res.status}`;
+  let code = `HTTP_${res.status}`;
+  let details: Record<string, unknown> = {};
+  try {
+    const body = (await res.json()) as ApiErrorBody;
+    if (body.error?.message) {
+      message = body.error.message;
+    }
+    if (body.error?.code) {
+      code = body.error.code;
+    }
+    if (body.error?.details) {
+      details = body.error.details;
+    }
+  } catch {
+    // ignore parse errors
+  }
+
+  if (res.status === 422) {
+    return new PolicyEvaluationDeniedError({
+      code,
+      message,
+      final_payable_minor:
+        typeof details.final_payable_minor === "number"
+          ? details.final_payable_minor
+          : undefined,
+      max_spend_minor:
+        typeof details.max_spend_minor === "number"
+          ? details.max_spend_minor
+          : undefined,
+      recoverable:
+        typeof details.recoverable === "boolean" ? details.recoverable : undefined,
+      policy_decision_id:
+        typeof details.policy_decision_id === "string"
+          ? details.policy_decision_id
+          : undefined,
+      policy_version:
+        typeof details.policy_version === "string"
+          ? details.policy_version
+          : undefined,
+    });
+  }
+
+  return new Error(message);
+}
+
+export async function fetchProductDetail(
+  productId: string,
+): Promise<ApiSuccessResponse<ProductDetail>> {
+  const res = await fetch(`${apiConfig.baseUrl}/products/${productId}`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw await parseApiError(res);
+  }
+  return (await res.json()) as ApiSuccessResponse<ProductDetail>;
+}
+
+export interface ProductEvidenceItem {
+  evidence_id: string;
+  source_type: string;
+  summary: string;
+  quality_signal: string;
+  confidence: number;
+}
+
+export async function fetchProductEvidence(
+  productId: string,
+): Promise<ApiSuccessResponse<{ evidence: ProductEvidenceItem[] }>> {
+  const res = await fetch(`${apiConfig.baseUrl}/products/${productId}/evidence`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw await parseApiError(res);
+  }
+  return (await res.json()) as ApiSuccessResponse<{ evidence: ProductEvidenceItem[] }>;
 }
 
 export async function fetchHealth(): Promise<ApiSuccessResponse<HealthData>> {
@@ -185,7 +269,7 @@ export async function evaluatePolicy(
     body: JSON.stringify(input),
   });
   if (!res.ok) {
-    throw await parseApiError(res);
+    throw await parsePolicyEvaluateError(res);
   }
   return (await res.json()) as ApiSuccessResponse<PolicyEvaluateAllowData>;
 }

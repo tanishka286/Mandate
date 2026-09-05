@@ -3,4 +3,7 @@ export type {
   OllamaClientOptions,
   OllamaGenerateRequest,
   OllamaGenerateResponse,
+  OllamaChatMessage,
+  OllamaChatRequest,
+  OllamaChatResponse,
 } from "./client.js";

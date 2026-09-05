@@ -204,6 +204,7 @@ export class CatalogRepository {
         product!inner (
           product_id,
           name,
+          brand,
           status,
           category!inner (
             code

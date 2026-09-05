@@ -20,11 +20,41 @@ export interface OllamaGenerateRequest {
   prompt: string;
   model?: string;
   stream?: boolean;
+  keep_alive?: string | number;
 }
 
 export interface OllamaGenerateResponse {
   model: string;
   response: string;
+  done: boolean;
+}
+
+export interface OllamaChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export interface OllamaChatRequest {
+  messages: OllamaChatMessage[];
+  model?: string;
+  stream?: boolean;
+  keep_alive?: string | number;
+  /** Qwen3 thinking mode — false disables extended reasoning when supported. */
+  think?: boolean;
+  /** "json" requests JSON-only output from Ollama. */
+  format?: "json";
+  options?: {
+    num_predict?: number;
+    temperature?: number;
+  };
+}
+
+export interface OllamaChatResponse {
+  model: string;
+  message: {
+    role: string;
+    content: string;
+  };
   done: boolean;
 }
 
@@ -59,6 +89,8 @@ export class OllamaClient {
   async generate(
     request: OllamaGenerateRequest,
   ): Promise<OllamaGenerateResponse> {
+    const env = getEnv();
+    const timeoutMs = env.OLLAMA_REQUEST_TIMEOUT_MS;
     const res = await fetch(`${this.baseUrl}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -66,7 +98,9 @@ export class OllamaClient {
         model: request.model ?? this.model,
         prompt: request.prompt,
         stream: request.stream ?? false,
+        keep_alive: request.keep_alive ?? env.OLLAMA_KEEP_ALIVE,
       }),
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     if (!res.ok) {
@@ -74,6 +108,34 @@ export class OllamaClient {
     }
 
     return (await res.json()) as OllamaGenerateResponse;
+  }
+
+  /**
+   * Chat completion — preferred for structured JSON extraction (think:false, format:json).
+   */
+  async chat(request: OllamaChatRequest): Promise<OllamaChatResponse> {
+    const env = getEnv();
+    const timeoutMs = env.OLLAMA_REQUEST_TIMEOUT_MS;
+    const res = await fetch(`${this.baseUrl}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: request.model ?? this.model,
+        messages: request.messages,
+        stream: request.stream ?? false,
+        keep_alive: request.keep_alive ?? env.OLLAMA_KEEP_ALIVE,
+        think: request.think,
+        format: request.format,
+        options: request.options,
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Ollama chat failed with status ${res.status}`);
+    }
+
+    return (await res.json()) as OllamaChatResponse;
   }
 }
 

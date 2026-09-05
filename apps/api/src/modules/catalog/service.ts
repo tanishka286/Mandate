@@ -172,6 +172,10 @@ export class CatalogService {
       pack_unit: row.pack_unit,
       price_minor: row.price_minor,
       currency: row.currency as "INR",
+      category_code: row.product.category?.code ?? "grocery",
+      product_status: row.product.status as "ACTIVE" | "INACTIVE",
+      sku_status: row.status as "ACTIVE" | "INACTIVE",
+      brand: row.product.brand ?? null,
       stock_available: stockAvailable,
     };
   }

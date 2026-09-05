@@ -1,140 +1,81 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import type {
   BasketQuoteData,
   BasketSelectionData,
   BasketView,
+  ProductDetail,
+  SessionAuditEventView,
   SessionBasketsData,
 } from "@mandate/types";
 import {
   createBasketQuote,
+  evaluatePolicy,
+  fetchProductEvidence,
+  fetchProductDetail,
+  fetchSessionAudit,
   fetchSessionBaskets,
   selectBasket,
+  type CheckoutResponseData,
+  type PolicyEvaluateAllowData,
+  type VerifyPaymentResult,
 } from "@/services/api-client";
-import { CheckoutPaymentPanel } from "@/components/CheckoutPaymentPanel";
-import { AuditTrailPanel } from "@/components/AuditTrailPanel";
-
-function formatInr(minor: number): string {
-  const rupees = (minor / 100).toFixed(2);
-  return `₹${rupees}`;
-}
-
-function BasketOption(props: {
-  basket: BasketView;
-  recommended: boolean;
-  selected: boolean;
-  disabled: boolean;
-  onSelect: () => void;
-}) {
-  const { basket, recommended, selected, disabled, onSelect } = props;
-  const title =
-    basket.basket_type === "BEST_VALUE" ? "Best Value" : "Best Quality";
-
-  return (
-    <article
-      className={[
-        "flex flex-col gap-4 rounded-lg border p-5 transition",
-        selected
-          ? "border-[var(--mandate-accent)] bg-[rgba(61,139,110,0.12)]"
-          : "border-white/10 bg-black/20",
-        recommended ? "ring-1 ring-[var(--mandate-accent)]/50" : "",
-      ].join(" ")}
-    >
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
-          {recommended ? (
-            <p className="mt-1 text-sm text-[var(--mandate-accent)]">
-              AI recommendation — guidance only
-            </p>
-          ) : (
-            <p className="mt-1 text-sm text-slate-400">Alternative option</p>
-          )}
-        </div>
-        <p className="text-right text-2xl font-semibold tabular-nums">
-          {formatInr(basket.final_payable_minor)}
-        </p>
-      </header>
-
-      <dl className="grid grid-cols-3 gap-2 text-sm text-slate-300">
-        <div>
-          <dt className="text-slate-500">Gross</dt>
-          <dd className="tabular-nums">{formatInr(basket.gross_amount_minor)}</dd>
-        </div>
-        <div>
-          <dt className="text-slate-500">Discount</dt>
-          <dd className="tabular-nums">
-            {formatInr(basket.discount_amount_minor)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-slate-500">Payable</dt>
-          <dd className="tabular-nums">
-            {formatInr(basket.final_payable_minor)}
-          </dd>
-        </div>
-      </dl>
-
-      {basket.quality_summary ? (
-        <p className="text-sm text-slate-300">
-          <span className="text-slate-500">Quality: </span>
-          {basket.quality_summary}
-        </p>
-      ) : null}
-
-      {basket.explanation ? (
-        <p className="text-sm leading-relaxed text-slate-400">
-          {basket.explanation}
-        </p>
-      ) : null}
-
-      <ul className="space-y-2 border-t border-white/10 pt-3 text-sm">
-        {basket.items.map((item) => (
-          <li
-            key={item.basket_item_id}
-            className="flex items-baseline justify-between gap-3"
-          >
-            <span className="text-slate-300">
-              SKU {item.sku_id.slice(0, 8)}… × {item.quantity}
-              {item.quality_level ? (
-                <span className="text-slate-500"> · {item.quality_level}</span>
-              ) : null}
-            </span>
-            <span className="tabular-nums text-slate-200">
-              {formatInr(item.line_amount_minor)}
-            </span>
-          </li>
-        ))}
-      </ul>
-
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={onSelect}
-        className={[
-          "mt-auto rounded-md px-4 py-2.5 text-sm font-medium transition",
-          selected
-            ? "bg-[var(--mandate-accent)] text-white"
-            : "bg-white/10 text-white hover:bg-white/15",
-          disabled ? "cursor-not-allowed opacity-50" : "",
-        ].join(" ")}
-      >
-        {selected ? "Selected" : `Choose ${title}`}
-      </button>
-    </article>
-  );
-}
+import { parseCombinationKey } from "@/lib/parse-combination-key";
+import {
+  buildSessionContextFromAudit,
+  type SessionContextView,
+} from "@/lib/session-context";
+import { isPolicyDeniedError, type PolicyDenyDetails } from "@/lib/policy-errors";
+import { basketTypeLabel, mandateLabelForId } from "@/lib/mandate-labels";
+import { DemoJourneyIndicator } from "@/components/DemoJourneyIndicator";
+import {
+  MandateUnderstandingPanel,
+  buildSkuLabelsFromProducts,
+} from "@/components/select/MandateUnderstandingPanel";
+import {
+  BasketComparisonSection,
+  RecommendationSection,
+} from "@/components/select/BasketComparisonSection";
+import {
+  FreshQuotePanel,
+  PolicyAuthorizationPanel,
+  SelectionProgress,
+  type SelectionFlowPhase,
+} from "@/components/select/SelectionAuthorizationFlow";
+import { OrderConfirmedPanel } from "@/components/payment/OrderConfirmedPanel";
+import { DecisionTimelinePanel } from "@/components/payment/DecisionTimelinePanel";
+import { TrustBoundaryPanel } from "@/components/payment/TrustBoundaryPanel";
 
 export function BasketSelectionExperience(props: {
   sessionId?: string;
   token?: string;
   mandateId?: string;
+  goalText?: string;
 }) {
   const [data, setData] = useState<SessionBasketsData | null>(null);
+  const [sessionContext, setSessionContext] = useState<SessionContextView | null>(
+    null,
+  );
+  const [products, setProducts] = useState<ProductDetail[]>([]);
+  const [evidenceSummaries, setEvidenceSummaries] = useState<string[]>([]);
   const [selection, setSelection] = useState<BasketSelectionData | null>(null);
   const [quote, setQuote] = useState<BasketQuoteData | null>(null);
+  const [policyAllow, setPolicyAllow] = useState<PolicyEvaluateAllowData | null>(
+    null,
+  );
+  const [policyDeny, setPolicyDeny] = useState<PolicyDenyDetails | null>(null);
+  const [flowPhase, setFlowPhase] = useState<SelectionFlowPhase>("idle");
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [recoveryApproved, setRecoveryApproved] = useState(false);
+  const [recoveryFailed, setRecoveryFailed] = useState(false);
+  const [denyCount, setDenyCount] = useState(0);
+  const [auditEvents, setAuditEvents] = useState<SessionAuditEventView[]>([]);
+  const [orderConfirmed, setOrderConfirmed] = useState<{
+    verification: VerifyPaymentResult;
+    checkout: CheckoutResponseData;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -143,62 +84,270 @@ export function BasketSelectionExperience(props: {
     [props.sessionId, props.token],
   );
 
-  useEffect(() => {
-    if (!props.sessionId || !props.token) {
-      return;
-    }
-    startTransition(async () => {
-      try {
-        setError(null);
-        const res = await fetchSessionBaskets(props.sessionId!, props.token!);
-        setData(res.data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load baskets");
-      }
-    });
-  }, [props.sessionId, props.token]);
+  const skuLabels = useMemo(
+    () => buildSkuLabelsFromProducts(products),
+    [products],
+  );
+
+  const requirements = useMemo(() => {
+    const key =
+      data?.best_value?.combination_key ?? data?.best_quality?.combination_key ?? null;
+    return parseCombinationKey(key);
+  }, [data]);
 
   const recommendedId = data?.recommendation?.recommended_basket_id ?? null;
   const selectedId =
     selection?.basket_id ?? data?.active_selection?.basket_id ?? null;
 
-  function onChoose(basket: BasketView) {
+  const selectedBasket = useMemo(() => {
+    if (!data || !selectedId) {
+      return null;
+    }
+    if (data.best_value?.basket_id === selectedId) {
+      return data.best_value;
+    }
+    if (data.best_quality?.basket_id === selectedId) {
+      return data.best_quality;
+    }
+    return null;
+  }, [data, selectedId]);
+
+  const selectedBasketLabel = basketTypeLabel(selectedBasket?.basket_type);
+
+  const loadSession = useCallback(async () => {
     if (!props.sessionId || !props.token) {
-      setError("Authoritative session context is required.");
+      return;
+    }
+
+    const [basketsRes, auditRes] = await Promise.all([
+      fetchSessionBaskets(props.sessionId, props.token),
+      fetchSessionAudit(props.sessionId, props.token),
+    ]);
+
+    setData(basketsRes.data);
+    setAuditEvents(auditRes.data.events);
+
+    const context = buildSessionContextFromAudit(
+      auditRes.data.events,
+      props.goalText,
+    );
+    setSessionContext(context);
+
+    const productIds = [
+      ...new Set(context.research.map((item) => item.productId)),
+    ];
+
+    const loadedProducts: ProductDetail[] = [];
+    const summaries: string[] = [];
+
+    for (const productId of productIds) {
+      try {
+        const [productRes, evidenceRes] = await Promise.all([
+          fetchProductDetail(productId),
+          fetchProductEvidence(productId),
+        ]);
+        loadedProducts.push(productRes.data);
+        for (const evidence of evidenceRes.data.evidence) {
+          summaries.push(evidence.summary);
+        }
+      } catch {
+        // Omit unavailable catalog/evidence lookups without fabricating data.
+      }
+    }
+
+    setProducts(loadedProducts);
+    setEvidenceSummaries(summaries);
+  }, [props.goalText, props.sessionId, props.token]);
+
+  useEffect(() => {
+    if (!canCallApi) {
       return;
     }
     startTransition(async () => {
       try {
         setError(null);
-        setQuote(null);
-        const selected = await selectBasket(
-          props.sessionId!,
-          basket.basket_id,
-          props.token!,
-        );
-        setSelection(selected.data);
-        const quoted = await createBasketQuote(basket.basket_id, props.token!);
-        setQuote(quoted.data);
+        await loadSession();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Selection failed");
+        setError(err instanceof Error ? err.message : "Failed to load session");
       }
     });
-  }
+  }, [canCallApi, loadSession]);
+
+  const resetAuthorizationState = useCallback(() => {
+    setSelection(null);
+    setQuote(null);
+    setPolicyAllow(null);
+    setPolicyDeny(null);
+    setFlowPhase("idle");
+    setRecoveryApproved(false);
+  }, []);
+
+  const refreshAudit = useCallback(async () => {
+    if (!props.sessionId || !props.token) {
+      return;
+    }
+    try {
+      const auditRes = await fetchSessionAudit(props.sessionId, props.token);
+      setAuditEvents(auditRes.data.events);
+    } catch {
+      // Keep existing audit events if refresh fails.
+    }
+  }, [props.sessionId, props.token]);
+
+  const onChoose = useCallback(
+    (basket: BasketView, options?: { fromRecovery?: boolean }) => {
+      if (!props.sessionId || !props.token || !props.mandateId) {
+        setError("Authoritative session context is required.");
+        return;
+      }
+
+      if (pending) {
+        return;
+      }
+
+      const fromRecovery = options?.fromRecovery ?? false;
+
+      startTransition(async () => {
+        try {
+          setError(null);
+          setPolicyAllow(null);
+          setPolicyDeny(null);
+          setFlowPhase("selecting");
+          if (fromRecovery) {
+            setRecoveryMode(true);
+          }
+
+          const selected = await selectBasket(
+            props.sessionId!,
+            basket.basket_id,
+            props.token!,
+          );
+          setSelection(selected.data);
+
+          setFlowPhase("quoting");
+          const quoted = await createBasketQuote(basket.basket_id, props.token!);
+          setQuote(quoted.data);
+
+          setFlowPhase("policy_checking");
+          const policyRes = await evaluatePolicy(
+            props.token!,
+            crypto.randomUUID(),
+            {
+              mandate_id: props.mandateId!,
+              basket_id: basket.basket_id,
+              quote_version: quoted.data.quote_version,
+            },
+          );
+
+          setPolicyAllow(policyRes.data);
+          setPolicyDeny(null);
+          setFlowPhase("authorized");
+          setRecoveryMode(false);
+          if (fromRecovery || denyCount > 0) {
+            setRecoveryApproved(true);
+          }
+          await refreshAudit();
+        } catch (err) {
+          if (isPolicyDeniedError(err)) {
+            setPolicyDeny(err.details);
+            setPolicyAllow(null);
+            setFlowPhase("denied");
+            setRecoveryMode(false);
+            setDenyCount((count) => count + 1);
+            if (fromRecovery || denyCount > 0) {
+              setRecoveryFailed(true);
+            }
+            await refreshAudit();
+            return;
+          }
+          setFlowPhase("error");
+          setRecoveryMode(false);
+          setError(err instanceof Error ? err.message : "Selection failed");
+        }
+      });
+    },
+    [denyCount, pending, props.mandateId, props.sessionId, props.token, refreshAudit],
+  );
+
+  const onPaymentVerified = useCallback(
+    async (result: {
+      verification: VerifyPaymentResult;
+      checkout: CheckoutResponseData;
+    }) => {
+      setOrderConfirmed(result);
+      if (props.sessionId && props.token) {
+        try {
+          const auditRes = await fetchSessionAudit(props.sessionId, props.token);
+          setAuditEvents(auditRes.data.events);
+        } catch {
+          // Keep existing audit events if refresh fails.
+        }
+      }
+    },
+    [props.sessionId, props.token],
+  );
+
+  const onChooseAlternative = useCallback(() => {
+    if (!data || !selection || recoveryFailed) {
+      return;
+    }
+
+    const alternative =
+      data.best_value?.basket_id === selection.basket_id
+        ? data.best_quality
+        : data.best_value;
+
+    setPolicyAllow(null);
+    setPolicyDeny(null);
+    setRecoveryApproved(false);
+    if (alternative) {
+      onChoose(alternative, { fromRecovery: true });
+    }
+  }, [data, onChoose, recoveryFailed, selection]);
+
+  const onReturnToComparison = useCallback(() => {
+    resetAuthorizationState();
+    setRecoveryFailed(false);
+    setRecoveryMode(false);
+    setDenyCount(0);
+    setError(null);
+  }, [resetAuthorizationState]);
+
+  const onPolicyDeniedAtCheckout = useCallback(
+    (details: PolicyDenyDetails) => {
+      setPolicyAllow(null);
+      setPolicyDeny(details);
+      setFlowPhase("denied");
+      setDenyCount((count) => count + 1);
+      void refreshAudit();
+    },
+    [refreshAudit],
+  );
+
+  const journeyStep = orderConfirmed
+    ? "confirm"
+    : policyAllow
+      ? "pay"
+      : flowPhase === "selecting" ||
+          flowPhase === "quoting" ||
+          flowPhase === "policy_checking" ||
+          policyDeny
+        ? "authorize"
+        : "compare";
 
   if (!canCallApi) {
     return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-16">
-        <h1 className="text-3xl font-semibold tracking-tight">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 py-16 sm:px-8">
+        <h1 className="text-3xl font-semibold tracking-tight text-white">
           Authoritative session required
         </h1>
         <p className="text-slate-300">
-          Basket selection and checkout require a real shopping session created by
-          the backend. Demo baskets are not shown here because financial amounts
-          must come from server quotes only.
+          Basket selection requires a real shopping session created by the backend.
+          Financial amounts must come from server quotes only.
         </p>
         <Link
           href="/"
-          className="inline-flex w-fit rounded-md bg-[var(--mandate-accent)] px-4 py-2.5 text-sm font-medium text-white"
+          className="inline-flex w-fit rounded-xl bg-[var(--mandate-accent)] px-5 py-3 text-sm font-medium text-white"
         >
           Start a new shopping session
         </Link>
@@ -208,7 +357,7 @@ export function BasketSelectionExperience(props: {
 
   if (!data && !error) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-16 text-slate-300">
+      <div className="mx-auto max-w-5xl px-5 py-16 text-slate-300 sm:px-8">
         Loading authoritative session baskets…
       </div>
     );
@@ -216,7 +365,7 @@ export function BasketSelectionExperience(props: {
 
   if (!data) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-16">
+      <div className="mx-auto max-w-5xl px-5 py-16 sm:px-8">
         <p className="text-red-300" role="alert">
           {error ?? "Failed to load session baskets."}
         </p>
@@ -228,120 +377,129 @@ export function BasketSelectionExperience(props: {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-12">
-      <header className="space-y-3">
-        <p className="text-sm uppercase tracking-[0.2em] text-[var(--mandate-accent)]">
-          Phase 7 · Selection
-        </p>
-        <h1 className="text-4xl font-semibold tracking-tight">Mandate</h1>
-        <p className="max-w-2xl text-slate-300">
-          Choose Best Value or Best Quality. The recommendation is guidance
-          only — payment still requires a fresh server quote and policy ALLOW.
-        </p>
-        <p className="text-xs text-slate-500">
-          Live API session {data.session_id}
-        </p>
-      </header>
+    <div className="relative min-h-screen overflow-hidden">
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-[24rem] bg-[radial-gradient(ellipse_at_top,rgba(61,139,110,0.12),transparent_65%)]"
+        aria-hidden="true"
+      />
 
-      {data.recommendation ? (
-        <section className="rounded-lg border border-white/10 bg-gradient-to-br from-[rgba(61,139,110,0.18)] to-transparent p-5">
-          <h2 className="text-lg font-medium">AI recommendation</h2>
-          <p className="mt-2 text-slate-200">
-            {data.recommendation.reason ??
-              "A basket is recommended based on cost and quality trade-offs."}
+      <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-8 px-5 py-10 sm:px-8 sm:py-14">
+        <header className="space-y-3">
+          <DemoJourneyIndicator currentStep={journeyStep} />
+          <p className="text-xs font-medium uppercase tracking-[0.24em] text-[var(--mandate-accent)]">
+            Mandate
           </p>
-          {data.recommendation.tradeoff_summary ? (
-            <p className="mt-2 text-sm text-slate-400">
-              {data.recommendation.tradeoff_summary}
-            </p>
-          ) : null}
-        </section>
-      ) : null}
-
-      <section className="grid gap-4 md:grid-cols-2">
-        {data.best_value ? (
-          <BasketOption
-            basket={data.best_value}
-            recommended={recommendedId === data.best_value.basket_id}
-            selected={selectedId === data.best_value.basket_id}
-            disabled={pending}
-            onSelect={() => onChoose(data.best_value!)}
-          />
-        ) : null}
-        {data.best_quality ? (
-          <BasketOption
-            basket={data.best_quality}
-            recommended={recommendedId === data.best_quality.basket_id}
-            selected={selectedId === data.best_quality.basket_id}
-            disabled={pending}
-            onSelect={() => onChoose(data.best_quality!)}
-          />
-        ) : null}
-      </section>
-
-      {selection ? (
-        <section className="space-y-2 rounded-lg border border-white/10 p-4 text-sm">
-          <h3 className="font-medium">Selection recorded</h3>
-          <p className="text-slate-400">
-            selection_id {selection.selection_id} · preference only ·{" "}
-            <span className="text-[var(--mandate-accent)]">
-              no order · no payment · no policy ALLOW
-            </span>
+          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+            {orderConfirmed ? "Purchase complete" : "Choose your basket"}
+          </h1>
+          <p className="max-w-2xl text-sm leading-relaxed text-slate-400 sm:text-base">
+            {orderConfirmed
+              ? "Your payment was verified server-side and your order is confirmed."
+              : "Review what Mandate understood, compare Best Value and Best Quality, then authorize a fresh server-side quote against your spending mandate."}
           </p>
-        </section>
-      ) : null}
+        </header>
 
-      {quote ? (
-        <section className="space-y-3 rounded-lg border border-[var(--mandate-accent)]/40 bg-black/30 p-4">
-          <h3 className="font-medium">Fresh authoritative quote</h3>
-          <p className="text-sm text-slate-400">
-            quote_version {quote.quote_version} · amounts from current
-            catalog/stock/incentives
-          </p>
-          <dl className="grid grid-cols-3 gap-3 text-sm">
-            <div>
-              <dt className="text-slate-500">Gross</dt>
-              <dd className="tabular-nums text-lg">
-                {formatInr(quote.gross_amount_minor)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Discount</dt>
-              <dd className="tabular-nums text-lg">
-                {formatInr(quote.discount_amount_minor)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Final payable</dt>
-              <dd className="tabular-nums text-lg font-semibold">
-                {formatInr(quote.final_payable_minor)}
-              </dd>
-            </div>
-          </dl>
-          {props.mandateId && selection ? (
-            <CheckoutPaymentPanel
-              token={props.token!}
-              mandateId={props.mandateId}
-              selection={selection}
-              quote={quote}
+        {orderConfirmed ? (
+          <>
+            <OrderConfirmedPanel
+              basketLabel={selectedBasketLabel}
+              mandateLabel={mandateLabelForId(props.mandateId)}
+              verification={orderConfirmed.verification}
+              orderId={orderConfirmed.checkout.order_id}
             />
-          ) : (
-            <p className="text-xs text-amber-300">
-              mandateId is required to enable Test Mode checkout.
-            </p>
-          )}
-        </section>
-      ) : null}
+            <DecisionTimelinePanel
+              events={auditEvents}
+              goalText={props.goalText}
+              defaultExpanded
+            />
+            <TrustBoundaryPanel />
+            <div className="flex justify-center pt-2">
+              <Link
+                href="/"
+                className="inline-flex rounded-xl border border-white/15 px-5 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+              >
+                Start a new shopping session
+              </Link>
+            </div>
+          </>
+        ) : (
+          <>
+        {sessionContext ? (
+          <MandateUnderstandingPanel
+            sessionContext={sessionContext}
+            requirements={requirements}
+            evidenceSummaries={evidenceSummaries}
+            skuLabels={skuLabels}
+          />
+        ) : null}
 
-      {error ? (
-        <p className="text-sm text-red-300" role="alert">
-          {error}
-        </p>
-      ) : null}
+        <BasketComparisonSection
+          data={data}
+          recommendedId={recommendedId}
+          selectedId={selectedId}
+          disabled={pending || Boolean(policyAllow)}
+          skuLabels={skuLabels}
+          onChoose={(basket) => onChoose(basket)}
+        />
 
-      {props.sessionId && props.token ? (
-        <AuditTrailPanel sessionId={props.sessionId} token={props.token} />
-      ) : null}
+        <RecommendationSection recommendation={data.recommendation} />
+
+        <SelectionProgress phase={flowPhase} recoveryMode={recoveryMode} />
+
+        {quote && flowPhase !== "idle" ? <FreshQuotePanel quote={quote} /> : null}
+
+        <PolicyAuthorizationPanel
+          allow={policyAllow}
+          deny={policyDeny}
+          mandateId={props.mandateId}
+          token={props.token}
+          selection={selection}
+          quote={quote}
+          basketLabel={selectedBasketLabel}
+          recoveryApproved={recoveryApproved}
+          recoveryFailed={recoveryFailed}
+          onPaymentVerified={onPaymentVerified}
+          onChooseAlternative={
+            policyDeny?.recoverable && !recoveryFailed
+              ? onChooseAlternative
+              : undefined
+          }
+          onReturnToComparison={
+            policyDeny ? onReturnToComparison : undefined
+          }
+          onPolicyDeniedAtCheckout={onPolicyDeniedAtCheckout}
+        />
+
+        {error ? (
+          <div
+            className="rounded-xl border border-red-400/25 bg-red-950/30 px-4 py-3 text-sm text-red-200"
+            role="alert"
+          >
+            <p>{error}</p>
+            {selection && quote && !policyDeny ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const basket =
+                    data.best_value?.basket_id === selection.basket_id
+                      ? data.best_value
+                      : data.best_quality;
+                  if (basket) {
+                    onChoose(basket);
+                  }
+                }}
+                className="mt-3 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/15"
+              >
+                Try again
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        <TrustBoundaryPanel />
+          </>
+        )}
+      </div>
     </div>
   );
 }

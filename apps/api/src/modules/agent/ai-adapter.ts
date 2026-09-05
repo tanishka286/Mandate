@@ -21,6 +21,8 @@ export interface StructuredLlmProvider {
     user: string;
     schema: z.ZodType<T>;
     maxRetries?: number;
+    /** When true, use Ollama chat with think:false and format:json (faster extraction). */
+    fastStructured?: boolean;
   }): Promise<T>;
 }
 
@@ -50,6 +52,7 @@ export class OllamaStructuredLlmProvider implements StructuredLlmProvider {
     user: string;
     schema: z.ZodType<T>;
     maxRetries?: number;
+    fastStructured?: boolean;
   }): Promise<T> {
     const env = getEnv();
     const maxRetries =
@@ -57,17 +60,10 @@ export class OllamaStructuredLlmProvider implements StructuredLlmProvider {
     let lastError: unknown;
 
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-      const prompt = [
-        args.system,
-        "",
-        "Respond with a single JSON object only. No markdown fences.",
-        "",
-        args.user,
-      ].join("\n");
-
       try {
-        const response = await this.client.generate({ prompt, stream: false });
-        const parsed = extractJsonObject(response.response);
+        const parsed = args.fastStructured
+          ? await this.generateFastStructuredJson(args.system, args.user)
+          : await this.generateLegacyStructuredJson(args.system, args.user);
         return parseOrThrow(args.schema, parsed);
       } catch (error) {
         lastError = error;
@@ -77,6 +73,45 @@ export class OllamaStructuredLlmProvider implements StructuredLlmProvider {
     throw lastError instanceof Error
       ? lastError
       : new Error("LLM structured generation failed");
+  }
+
+  /** Chat API with think:false, format:json, bounded output — for requirement extraction. */
+  private async generateFastStructuredJson(
+    system: string,
+    user: string,
+  ): Promise<unknown> {
+    const env = getEnv();
+    const response = await this.client.chat({
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      stream: false,
+      think: false,
+      format: "json",
+      options: {
+        num_predict: env.OLLAMA_STRUCTURED_NUM_PREDICT,
+        temperature: 0,
+      },
+    });
+    return extractJsonObject(response.message.content);
+  }
+
+  /** Legacy /generate path for recommendation prose when LLM recommendation is enabled. */
+  private async generateLegacyStructuredJson(
+    system: string,
+    user: string,
+  ): Promise<unknown> {
+    const prompt = [
+      system,
+      "",
+      "Respond with a single JSON object only. No markdown fences.",
+      "",
+      user,
+    ].join("\n");
+
+    const response = await this.client.generate({ prompt, stream: false });
+    return extractJsonObject(response.response);
   }
 }
 
@@ -99,6 +134,7 @@ export class StubStructuredLlmProvider implements StructuredLlmProvider {
     user: string;
     schema: z.ZodType<T>;
     maxRetries?: number;
+    fastStructured?: boolean;
   }): Promise<T> {
     const raw =
       typeof this.payloads === "function"

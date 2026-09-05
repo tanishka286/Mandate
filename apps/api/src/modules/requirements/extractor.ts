@@ -7,5 +7,5 @@ import type { ExtractionResult } from "./extraction-schema.js";
  * Phase 6 may supply an LLM-backed adapter behind the same interface.
  */
 export interface RequirementExtractor {
-  extract(intent: ShoppingIntent): ExtractionResult;
+  extract(intent: ShoppingIntent): Promise<ExtractionResult>;
 }

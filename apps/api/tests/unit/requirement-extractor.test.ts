@@ -26,12 +26,12 @@ function intent(goal_text: string, overrides: Partial<ShoppingIntent> = {}) {
   return { ...baseIntent, goal_text, ...overrides };
 }
 
-describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
+describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", async () => {
   const extractor = new DeterministicRequirementExtractor();
 
-  describe("clear inputs", () => {
-    it('extracts "6 eggs" as eggs / 6 / pieces', () => {
-      const result = extractor.extract(intent("6 eggs"));
+  describe("clear inputs", async () => {
+    it('extracts "6 eggs" as eggs / 6 / pieces', async () => {
+      const result = await extractor.extract(intent("6 eggs"));
       expect(result.status).toBe("SUCCESS");
       if (result.status !== "SUCCESS") return;
       expect(result.requirements[0]).toMatchObject({
@@ -42,8 +42,8 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
       });
     });
 
-    it('extracts "2 packs pasta" as pasta / 2 / packs', () => {
-      const result = extractor.extract(intent("2 packs pasta"));
+    it('extracts "2 packs pasta" as pasta / 2 / packs', async () => {
+      const result = await extractor.extract(intent("2 packs pasta"));
       expect(result.status).toBe("SUCCESS");
       if (result.status !== "SUCCESS") return;
       expect(result.requirements[0]).toMatchObject({
@@ -57,8 +57,8 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
       ).toBe(false);
     });
 
-    it('extracts "Pasta for 4" with documented pack assumption', () => {
-      const result = extractor.extract(intent("Pasta for 4"));
+    it('extracts "Pasta for 4" with documented pack assumption', async () => {
+      const result = await extractor.extract(intent("Pasta for 4"));
       expect(result.status).toBe("SUCCESS");
       if (result.status !== "SUCCESS") return;
       expect(result.requirements[0]).toMatchObject({
@@ -76,9 +76,9 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
     });
   });
 
-  describe("budget", () => {
-    it("keeps budget on intent and never creates a budget requirement", () => {
-      const result = extractor.extract(
+  describe("budget", async () => {
+    it("keeps budget on intent and never creates a budget requirement", async () => {
+      const result = await extractor.extract(
         intent("Pasta for 4, budget ₹1000", { budget_minor: 100000 }),
       );
       expect(result.status).toBe("SUCCESS");
@@ -91,17 +91,17 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
       );
     });
 
-    it("does not invent groceries from budget-only text", () => {
-      const result = extractor.extract(
+    it("does not invent groceries from budget-only text", async () => {
+      const result = await extractor.extract(
         intent("Budget ₹1000", { budget_minor: 100000 }),
       );
       expect(result.status).toBe("CLARIFICATION_REQUIRED");
     });
   });
 
-  describe("constraints", () => {
-    it('preserves "brand Farm Fresh" phrase', () => {
-      const result = extractor.extract(intent("6 eggs, brand Farm Fresh"));
+  describe("constraints", async () => {
+    it('preserves "brand Farm Fresh" phrase', async () => {
+      const result = await extractor.extract(intent("6 eggs, brand Farm Fresh"));
       expect(result.status).toBe("SUCCESS");
       if (result.status !== "SUCCESS") return;
       expect(result.requirements[0].constraints_json).toEqual(
@@ -109,8 +109,8 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
       );
     });
 
-    it('preserves Title-Case brand in "6 Farm Fresh eggs"', () => {
-      const result = extractor.extract(intent("6 Farm Fresh eggs"));
+    it('preserves Title-Case brand in "6 Farm Fresh eggs"', async () => {
+      const result = await extractor.extract(intent("6 Farm Fresh eggs"));
       expect(result.status).toBe("SUCCESS");
       if (result.status !== "SUCCESS") return;
       expect(result.requirements[0].constraints_json).toEqual([
@@ -118,8 +118,8 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
       ]);
     });
 
-    it("preserves explicit category constraint", () => {
-      const result = extractor.extract(
+    it("preserves explicit category constraint", async () => {
+      const result = await extractor.extract(
         intent("2 packs pasta category pantry"),
       );
       expect(result.status).toBe("SUCCESS");
@@ -129,8 +129,8 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
       );
     });
 
-    it("preserves explicit exclusion constraint", () => {
-      const result = extractor.extract(
+    it("preserves explicit exclusion constraint", async () => {
+      const result = await extractor.extract(
         intent("6 eggs exclude shellfish"),
       );
       expect(result.status).toBe("SUCCESS");
@@ -140,8 +140,8 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
       );
     });
 
-    it("does not turn cheap/available into price or stock constraints", () => {
-      const result = extractor.extract(intent("6 cheap available eggs"));
+    it("does not turn cheap/available into price or stock constraints", async () => {
+      const result = await extractor.extract(intent("6 cheap available eggs"));
       expect(result.status).toBe("SUCCESS");
       if (result.status !== "SUCCESS") return;
       expect(result.requirements[0].constraints_json).toEqual([]);
@@ -153,9 +153,9 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
     });
   });
 
-  describe("ambiguity", () => {
-    it('returns CLARIFICATION_REQUIRED for "something for dinner"', () => {
-      const result = extractor.extract(intent("something for dinner"));
+  describe("ambiguity", async () => {
+    it('returns CLARIFICATION_REQUIRED for "something for dinner"', async () => {
+      const result = await extractor.extract(intent("something for dinner"));
       expect(result.status).toBe("CLARIFICATION_REQUIRED");
       if (result.status !== "CLARIFICATION_REQUIRED") return;
       expect(result.requirements).toEqual([]);
@@ -163,25 +163,25 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
       expect(result.clarification.reason).toBeTruthy();
     });
 
-    it('returns CLARIFICATION_REQUIRED for "eggs" without quantity', () => {
-      const result = extractor.extract(intent("eggs"));
+    it('returns CLARIFICATION_REQUIRED for "eggs" without quantity', async () => {
+      const result = await extractor.extract(intent("eggs"));
       expect(result.status).toBe("CLARIFICATION_REQUIRED");
       if (result.status !== "CLARIFICATION_REQUIRED") return;
       expect(result.clarification.reason).toMatch(/quantity/i);
       expect(result.requirements).toEqual([]);
     });
 
-    it("does not fabricate requirements for incomplete grocery phrases", () => {
-      const result = extractor.extract(intent("pasta"));
+    it("does not fabricate requirements for incomplete grocery phrases", async () => {
+      const result = await extractor.extract(intent("pasta"));
       expect(result.status).toBe("CLARIFICATION_REQUIRED");
       if (result.status !== "CLARIFICATION_REQUIRED") return;
       expect(result.requirements).toEqual([]);
     });
   });
 
-  describe("quality preference", () => {
-    it('maps quality_preference "acceptable" to minimum_quality', () => {
-      const result = extractor.extract(
+  describe("quality preference", async () => {
+    it('maps quality_preference "acceptable" to minimum_quality', async () => {
+      const result = await extractor.extract(
         intent("6 eggs", { quality_preference: "acceptable" }),
       );
       expect(result.status).toBe("SUCCESS");
@@ -189,8 +189,8 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
       expect(result.requirements[0].minimum_quality).toBe("acceptable");
     });
 
-    it("preserves unmapped quality preference as an assumption", () => {
-      const result = extractor.extract(
+    it("preserves unmapped quality preference as an assumption", async () => {
+      const result = await extractor.extract(
         intent("6 eggs", { quality_preference: "premium" }),
       );
       expect(result.status).toBe("SUCCESS");
@@ -202,9 +202,9 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
     });
   });
 
-  describe("confidence", () => {
-    it("assigns confidence within [0, 1]", () => {
-      const result = extractor.extract(intent("6 eggs"));
+  describe("confidence", async () => {
+    it("assigns confidence within [0, 1]", async () => {
+      const result = await extractor.extract(intent("6 eggs"));
       expect(result.status).toBe("SUCCESS");
       if (result.status !== "SUCCESS") return;
       for (const req of result.requirements) {
@@ -212,15 +212,15 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
       }
     });
 
-    it("rejects confidence outside [0, 1] at schema boundary", () => {
+    it("rejects confidence outside [0, 1] at schema boundary", async () => {
       expect(() => confidenceSchema.parse(1.5)).toThrow();
       expect(() => confidenceSchema.parse(-0.1)).toThrow();
     });
   });
 
-  describe("multiple requirements", () => {
-    it('extracts "6 eggs and 2 packs pasta"', () => {
-      const result = extractor.extract(intent("6 eggs and 2 packs pasta"));
+  describe("multiple requirements", async () => {
+    it('extracts "6 eggs and 2 packs pasta"', async () => {
+      const result = await extractor.extract(intent("6 eggs and 2 packs pasta"));
       expect(result.status).toBe("SUCCESS");
       if (result.status !== "SUCCESS") return;
       expect(result.requirements).toEqual(
@@ -240,16 +240,16 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
       expect(result.requirements).toHaveLength(2);
     });
 
-    it("clarifies ambiguous multi-item input instead of partial invention", () => {
-      const result = extractor.extract(intent("6 eggs and pasta"));
+    it("clarifies ambiguous multi-item input instead of partial invention", async () => {
+      const result = await extractor.extract(intent("6 eggs and pasta"));
       expect(result.status).toBe("CLARIFICATION_REQUIRED");
       if (result.status !== "CLARIFICATION_REQUIRED") return;
       expect(result.requirements).toEqual([]);
     });
   });
 
-  describe("authority boundaries", () => {
-    it("rejects out-of-scope product/price fields on drafts", () => {
+  describe("authority boundaries", async () => {
+    it("rejects out-of-scope product/price fields on drafts", async () => {
       expect(() =>
         extractedRequirementDraftSchema.parse({
           item_name: "eggs",
@@ -307,8 +307,8 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
       ).toThrow();
     });
 
-    it("produces schema-valid ExtractionResult and assumptions", () => {
-      const success = extractor.extract(intent("6 eggs"));
+    it("produces schema-valid ExtractionResult and assumptions", async () => {
+      const success = await extractor.extract(intent("6 eggs"));
       expect(extractionResultSchema.parse(success)).toBeTruthy();
       if (success.status === "SUCCESS") {
         for (const a of success.assumptions) {
@@ -317,7 +317,7 @@ describe("DeterministicRequirementExtractor (Phase 3 Step 6 hardening)", () => {
       }
       expect(
         extractionResultSchema.parse(
-          extractor.extract(intent("something for dinner")),
+          await extractor.extract(intent("something for dinner")),
         ),
       ).toBeTruthy();
     });

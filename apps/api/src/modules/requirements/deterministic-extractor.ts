@@ -19,7 +19,7 @@ import {
  * Does NOT invent: products, SKUs, prices, stock, payment, or arbitrary quantities.
  */
 export class DeterministicRequirementExtractor implements RequirementExtractor {
-  extract(intent: ShoppingIntent): ExtractionResult {
+  async extract(intent: ShoppingIntent): Promise<ExtractionResult> {
     const goal = intent.goal_text.trim();
     const assumptions: ExtractionAssumption[] = [];
     const globalConstraints = collectGlobalConstraints(goal);
