@@ -12,9 +12,22 @@ export type { CheckoutResult };
  */
 export interface CheckoutInput {
   user_id: string;
-  session_id: string;
+  session_id?: string;
   selection_id: string;
   policy_decision_id: string;
   idempotency_key: string;
   request_id?: string;
+}
+
+/**
+ * Sanitized HTTP response payload for POST /api/v1/checkout.
+ * Exposes only public handoff details; never leaks secrets or internal fingerprints.
+ */
+export interface CheckoutResponseData {
+  order_id: string;
+  razorpay_order_id: string;
+  amount_minor: number;
+  currency: string;
+  status: "PAYMENT_PENDING";
+  razorpay_key_id?: string;
 }

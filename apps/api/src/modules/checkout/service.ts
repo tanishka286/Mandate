@@ -57,7 +57,7 @@ export class CheckoutService {
       rawInput,
     ) as ValidatedCheckoutInput;
 
-    if (!input.user_id || !input.session_id) {
+    if (!input.user_id) {
       throw new AppError({
         code: ErrorCodes.UNAUTHORIZED,
         message: "Authentication required for checkout",
@@ -140,13 +140,15 @@ export class CheckoutService {
       });
     }
 
-    if (selection.session_id !== input.session_id) {
+    if (input.session_id && selection.session_id !== input.session_id) {
       throw new AppError({
         code: ErrorCodes.FORBIDDEN,
         message: "Basket selection does not belong to current session",
         statusCode: 403,
       });
     }
+
+    const sessionId = input.session_id ?? selection.session_id;
 
     if (selection.superseded_at !== null) {
       throw new AppError({
@@ -180,7 +182,7 @@ export class CheckoutService {
       });
     }
 
-    if (basket.user_id !== input.user_id || basket.session_id !== input.session_id) {
+    if (basket.user_id !== input.user_id || basket.session_id !== sessionId) {
       throw new AppError({
         code: ErrorCodes.FORBIDDEN,
         message: "Basket does not belong to authenticated user/session",
@@ -342,7 +344,7 @@ export class CheckoutService {
         await this.paymentsRepository.createCheckoutPersistenceAtomic({
           order_id: orderId,
           user_id: input.user_id,
-          session_id: input.session_id,
+          session_id: sessionId,
           mandate_id: policyResult.mandate_id,
           basket_id: policyResult.basket_id,
           policy_decision_id: policyResult.policy_decision_id,

@@ -161,3 +161,43 @@ export interface AtomicCheckoutPersistenceResult {
   idempotency: CheckoutIdempotencyRecord;
   replayed: boolean;
 }
+
+/** Request body payload for POST /api/v1/payments/verify. */
+export interface VerifyPaymentRequestBody {
+  order_id: string;
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+/** Service input for payment verification. */
+export interface VerifyPaymentInput extends VerifyPaymentRequestBody {
+  user_id: string;
+}
+
+/** Successful verification result payload (Doc 08). */
+export interface VerifyPaymentResult {
+  payment_id: string;
+  order_id: string;
+  status: "VERIFIED";
+  razorpay_payment_id: string;
+  amount_minor: number;
+  verified_at: string;
+}
+
+/** Input for atomic payment verification persistence (Phase 8 Step 6). */
+export interface VerifyPaymentPersistenceAtomicInput {
+  order_id: string;
+  payment_id?: string | null;
+  razorpay_payment_id: string;
+  verified_at?: string | null;
+  method?: string | null;
+}
+
+/** Output of atomic payment verification persistence (Phase 8 Step 6). */
+export interface AtomicPaymentVerificationPersistenceResult {
+  order: Order;
+  payment: Payment;
+  replayed: boolean;
+}
+

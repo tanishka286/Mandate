@@ -80,3 +80,14 @@ export const createRazorpayWebhookEventInputSchema = z.object({
   error_code: z.string().trim().min(1).nullable().optional(),
   payload_json: z.record(z.unknown()).nullable().optional(),
 });
+
+/** Strict request schema for POST /api/v1/payments/verify. */
+export const verifyPaymentRequestBodySchema = z
+  .object({
+    order_id: z.string().uuid(),
+    razorpay_order_id: z.string().trim().min(1),
+    razorpay_payment_id: z.string().trim().min(1),
+    razorpay_signature: z.string().trim().min(1),
+  })
+  .strict();
+

@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { describe, it, expect, vi } from "vitest";
 import {
   RazorpayServerAdapter,
@@ -416,6 +417,139 @@ describe("RazorpayServerAdapter (Test Mode)", () => {
           env: "test",
         });
       }).toThrowError(AppError);
+    });
+  });
+
+  // 11. Cryptographic signature verification (Phase 8 Step 6)
+  describe("11. verifyPaymentSignature", () => {
+    it("returns true for a cryptographically valid Razorpay signature", () => {
+      const secret = "test_key_secret_step6_crypto";
+      const adapter = new RazorpayServerAdapter({
+        client: createMockClient(),
+        keySecret: secret,
+      });
+
+      const orderId = "order_rzp_crypto_123";
+      const paymentId = "pay_rzp_crypto_456";
+      const validSig = createHmac("sha256", secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest("hex");
+
+      const result = adapter.verifyPaymentSignature({
+        razorpay_order_id: orderId,
+        razorpay_payment_id: paymentId,
+        razorpay_signature: validSig,
+      });
+
+      expect(result).toBe(true);
+    });
+
+    it("returns false for an invalid Razorpay signature", () => {
+      const secret = "test_key_secret_step6_crypto";
+      const adapter = new RazorpayServerAdapter({
+        client: createMockClient(),
+        keySecret: secret,
+      });
+
+      const result = adapter.verifyPaymentSignature({
+        razorpay_order_id: "order_rzp_123",
+        razorpay_payment_id: "pay_rzp_456",
+        razorpay_signature: "tampered_signature_hex",
+      });
+
+      expect(result).toBe(false);
+    });
+
+    it("fails closed on missing, malformed, or empty inputs", () => {
+      const adapter = new RazorpayServerAdapter({
+        client: createMockClient(),
+        keySecret: "test_key_secret",
+      });
+
+      expect(
+        adapter.verifyPaymentSignature({
+          razorpay_order_id: "",
+          razorpay_payment_id: "pay_123",
+          razorpay_signature: "sig_123",
+        }),
+      ).toBe(false);
+
+      expect(
+        adapter.verifyPaymentSignature({
+          razorpay_order_id: "order_123",
+          razorpay_payment_id: "   ",
+          razorpay_signature: "sig_123",
+        }),
+      ).toBe(false);
+
+      expect(
+        adapter.verifyPaymentSignature({
+          razorpay_order_id: "order_123",
+          razorpay_payment_id: "pay_123",
+          razorpay_signature: "",
+        }),
+      ).toBe(false);
+    });
+  });
+
+  // 12. Provider payment lookup (fetchPayment)
+  describe("12. fetchPayment", () => {
+    it("successfully fetches and sanitizes payment details", async () => {
+      const mockClient = {
+        orders: { create: vi.fn() },
+        payments: {
+          fetch: vi.fn().mockResolvedValue({
+            id: "pay_rzp_lookup_001",
+            order_id: "order_rzp_lookup_001",
+            amount: 7500,
+            currency: "inr",
+            status: "captured",
+            method: "upi",
+          }),
+        },
+      };
+
+      const adapter = new RazorpayServerAdapter({ client: mockClient });
+      const payment = await adapter.fetchPayment("pay_rzp_lookup_001");
+
+      expect(payment).toEqual({
+        razorpay_payment_id: "pay_rzp_lookup_001",
+        razorpay_order_id: "order_rzp_lookup_001",
+        amount: 7500,
+        currency: "INR",
+        status: "captured",
+        method: "upi",
+      });
+    });
+
+    it("rejects empty payment ID with VALIDATION_ERROR", async () => {
+      const adapter = new RazorpayServerAdapter({ client: createMockClient() });
+      await expect(adapter.fetchPayment("  ")).rejects.toThrowError(AppError);
+    });
+
+    it("sanitizes error message and never exposes key secret", async () => {
+      const secret = "super_secret_key_secret_xyz";
+      const mockClient = {
+        orders: { create: vi.fn() },
+        payments: {
+          fetch: vi.fn().mockRejectedValue(new Error(`Failed with secret=${secret}`)),
+        },
+      };
+
+      const adapter = new RazorpayServerAdapter({
+        client: mockClient,
+        keySecret: secret,
+      });
+
+      try {
+        await adapter.fetchPayment("pay_123");
+        expect.unreachable();
+      } catch (err) {
+        const appErr = err as AppError;
+        expect(appErr.code).toBe("PAYMENT_PROVIDER_ERROR");
+        expect(appErr.message).not.toContain(secret);
+        expect(appErr.message).toContain("[REDACTED]");
+      }
     });
   });
 });

@@ -21,6 +21,8 @@ import type {
   WebhookProcessingStatus,
   CreateCheckoutPersistenceAtomicInput,
   AtomicCheckoutPersistenceResult,
+  VerifyPaymentPersistenceAtomicInput,
+  AtomicPaymentVerificationPersistenceResult,
 } from "./types.js";
 
 function mapOrderRow(row: OrderRow): Order {
@@ -629,6 +631,82 @@ export class PaymentsRepository {
       order: mapOrderRow(payload.order),
       payment: mapPaymentRow(payload.payment),
       idempotency: mapCheckoutIdempotencyRow(payload.idempotency),
+      replayed: Boolean(payload.replayed),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 6. Atomic Payment Verification Persistence (Phase 8 Step 6)
+  // ---------------------------------------------------------------------------
+
+  async verifyPaymentPersistenceAtomic(
+    input: VerifyPaymentPersistenceAtomicInput,
+  ): Promise<AtomicPaymentVerificationPersistenceResult> {
+    const db = getSupabaseClient();
+
+    const { data, error } = await db.rpc(
+      "verify_payment_persistence_atomic",
+      {
+        p_order_id: input.order_id,
+        p_payment_id: input.payment_id ?? null,
+        p_razorpay_payment_id: input.razorpay_payment_id,
+        p_verified_at: input.verified_at ?? null,
+        p_method: input.method ?? null,
+      },
+    );
+
+    if (error) {
+      if (error.message?.includes("PAYMENT_ALREADY_VERIFIED_CONFLICT")) {
+        throw new AppError({
+          code: ErrorCodes.CONFLICT,
+          message:
+            "Payment is already verified with a different provider payment ID",
+          statusCode: 409,
+          details: {
+            order_id: input.order_id,
+            razorpay_payment_id: input.razorpay_payment_id,
+          },
+        });
+      }
+      if (error.message?.includes("INVALID_STATE_TRANSITION")) {
+        throw new AppError({
+          code: ErrorCodes.CONFLICT,
+          message: error.message,
+          statusCode: 409,
+          details: {
+            order_id: input.order_id,
+            razorpay_payment_id: input.razorpay_payment_id,
+          },
+        });
+      }
+      if (error.message?.includes("ORDER_NOT_FOUND")) {
+        throw new AppError({
+          code: ErrorCodes.NOT_FOUND,
+          message: "Order not found",
+          statusCode: 404,
+          details: { order_id: input.order_id },
+        });
+      }
+      if (error.message?.includes("PAYMENT_NOT_FOUND")) {
+        throw new AppError({
+          code: ErrorCodes.NOT_FOUND,
+          message: "Payment not found for order",
+          statusCode: 404,
+          details: { order_id: input.order_id },
+        });
+      }
+      throw mapDatabaseError(error, "Failed to atomically persist payment verification");
+    }
+
+    const payload = data as {
+      order: OrderRow;
+      payment: PaymentRow;
+      replayed: boolean;
+    };
+
+    return {
+      order: mapOrderRow(payload.order),
+      payment: mapPaymentRow(payload.payment),
       replayed: Boolean(payload.replayed),
     };
   }

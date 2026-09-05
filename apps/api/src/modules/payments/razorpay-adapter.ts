@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import Razorpay from "razorpay";
 import { getEnv, type Env } from "../../config/env.js";
 import { AppError, isAppError } from "../../shared/errors/index.js";
@@ -20,6 +21,16 @@ export interface RazorpayClientLike {
       currency: string;
       receipt?: string | null;
       status?: string | null;
+    }>;
+  };
+  payments?: {
+    fetch(paymentId: string): Promise<{
+      id: string;
+      order_id?: string | null;
+      amount: number | string;
+      currency: string;
+      status: string;
+      method?: string | null;
     }>;
   };
 }
@@ -49,6 +60,21 @@ export interface CreateRazorpayOrderResult {
   currency: "INR";
   receipt: string;
   status: string;
+}
+
+export interface VerifyPaymentSignatureInput {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+export interface RazorpayPaymentDetails {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  method: string | null;
 }
 
 export interface RazorpayServerAdapterOptions {
@@ -251,6 +277,167 @@ export class RazorpayServerAdapter {
         (typeof errObj.message === "string"
           ? errObj.message
           : "Payment provider rejected order creation");
+
+      const sanitized = sanitizeErrorMessage(rawMessage, this.keySecret);
+
+      throw new AppError({
+        code: "PAYMENT_PROVIDER_ERROR",
+        message: sanitized,
+        statusCode: 502,
+        details: {
+          provider: "razorpay",
+          provider_error_code: providerErrorObj?.code ?? "PROVIDER_ERROR",
+        },
+      });
+    }
+  }
+
+  /**
+   * Cryptographically verify the Razorpay payment signature server-side.
+   *
+   * Invariants:
+   * - Uses HMAC-SHA256(order_id + '|' + payment_id, secret).
+   * - Uses timingSafeEqual to avoid timing side-channels.
+   * - Fails closed on missing or malformed inputs.
+   * - Never logs, exposes, or echoes secrets or signatures.
+   */
+  verifyPaymentSignature(input: VerifyPaymentSignatureInput): boolean {
+    if (
+      !input ||
+      typeof input !== "object" ||
+      !input.razorpay_order_id ||
+      typeof input.razorpay_order_id !== "string" ||
+      input.razorpay_order_id.trim().length === 0 ||
+      !input.razorpay_payment_id ||
+      typeof input.razorpay_payment_id !== "string" ||
+      input.razorpay_payment_id.trim().length === 0 ||
+      !input.razorpay_signature ||
+      typeof input.razorpay_signature !== "string" ||
+      input.razorpay_signature.trim().length === 0
+    ) {
+      return false;
+    }
+
+    if (!this.keySecret) {
+      throw new AppError({
+        code: ErrorCodes.INTERNAL_ERROR,
+        message: "Razorpay key secret is not configured",
+        statusCode: 500,
+      });
+    }
+
+    try {
+      const payload = `${input.razorpay_order_id.trim()}|${input.razorpay_payment_id.trim()}`;
+      const expectedSignature = createHmac("sha256", this.keySecret)
+        .update(payload)
+        .digest("hex");
+
+      const expectedBuffer = Buffer.from(expectedSignature, "utf8");
+      const providedBuffer = Buffer.from(input.razorpay_signature.trim(), "utf8");
+
+      if (expectedBuffer.length !== providedBuffer.length) {
+        return false;
+      }
+
+      return timingSafeEqual(expectedBuffer, providedBuffer);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Authoritatively fetch payment details from the Razorpay provider.
+   *
+   * Invariants:
+   * - Server-side only with test mode credentials.
+   * - Returns sanitized provider payment details for correlation and amount reconciliation.
+   * - Never exposes raw secrets or provider response blobs.
+   */
+  async fetchPayment(paymentId: string): Promise<RazorpayPaymentDetails> {
+    if (
+      !paymentId ||
+      typeof paymentId !== "string" ||
+      paymentId.trim().length === 0
+    ) {
+      throw new AppError({
+        code: ErrorCodes.VALIDATION_ERROR,
+        message: "Payment ID is required to fetch payment",
+        statusCode: 400,
+      });
+    }
+
+    const trimmedId = paymentId.trim();
+
+    try {
+      if (
+        !this.client.payments ||
+        typeof this.client.payments.fetch !== "function"
+      ) {
+        throw new AppError({
+          code: "PAYMENT_PROVIDER_ERROR",
+          message: "Payment provider client does not support payment lookup",
+          statusCode: 502,
+        });
+      }
+
+      const response = await this.client.payments.fetch(trimmedId);
+
+      if (!response || typeof response !== "object") {
+        throw new AppError({
+          code: "PAYMENT_PROVIDER_MALFORMED_RESPONSE",
+          message: "Payment provider returned non-object response for payment lookup",
+          statusCode: 502,
+        });
+      }
+
+      if (
+        !response.id ||
+        typeof response.id !== "string" ||
+        response.id.trim().length === 0
+      ) {
+        throw new AppError({
+          code: "PAYMENT_PROVIDER_MALFORMED_RESPONSE",
+          message: "Payment provider response is missing payment id",
+          statusCode: 502,
+        });
+      }
+
+      return {
+        razorpay_payment_id: response.id.trim(),
+        razorpay_order_id: String(response.order_id ?? "").trim(),
+        amount: Number(response.amount),
+        currency: String(response.currency ?? "").toUpperCase(),
+        status: String(response.status ?? ""),
+        method: response.method ? String(response.method) : null,
+      };
+    } catch (error) {
+      if (isAppError(error)) {
+        throw error;
+      }
+
+      const errObj = error as Record<string, unknown>;
+      const isTimeout =
+        errObj.code === "ECONNABORTED" ||
+        errObj.code === "ETIMEDOUT" ||
+        String(errObj.message ?? "").toLowerCase().includes("timeout");
+
+      if (isTimeout) {
+        throw new AppError({
+          code: "PAYMENT_PROVIDER_TIMEOUT",
+          message: "Payment provider payment lookup timed out",
+          statusCode: 504,
+          details: { provider: "razorpay", is_timeout: true },
+        });
+      }
+
+      const providerErrorObj = errObj.error as
+        | { description?: string; code?: string }
+        | undefined;
+      const rawMessage =
+        providerErrorObj?.description ||
+        (typeof errObj.message === "string"
+          ? errObj.message
+          : "Payment provider rejected payment lookup");
 
       const sanitized = sanitizeErrorMessage(rawMessage, this.keySecret);
 

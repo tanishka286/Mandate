@@ -27,12 +27,15 @@ export {
   createPaymentInputSchema,
   createCheckoutIdempotencyInputSchema,
   createRazorpayWebhookEventInputSchema,
+  verifyPaymentRequestBodySchema,
 } from "./schema.js";
 export {
   RazorpayServerAdapter,
   buildOrderReceipt,
   type CreateRazorpayOrderInput,
   type CreateRazorpayOrderResult,
+  type VerifyPaymentSignatureInput,
+  type RazorpayPaymentDetails,
   type RazorpayClientLike,
   type RazorpayServerAdapterOptions,
 } from "./razorpay-adapter.js";
@@ -53,4 +56,9 @@ export type {
   CreateRazorpayWebhookEventInput,
   CreateCheckoutPersistenceAtomicInput,
   AtomicCheckoutPersistenceResult,
+  VerifyPaymentRequestBody,
+  VerifyPaymentInput,
+  VerifyPaymentResult,
+  VerifyPaymentPersistenceAtomicInput,
+  AtomicPaymentVerificationPersistenceResult,
 } from "./types.js";
