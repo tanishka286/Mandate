@@ -62,6 +62,8 @@ export function buildMaterializeInputFromOptimization(args: {
   intent_id?: string | null;
   mandate_id: string;
   optimization: OptimizationToolData;
+  agent_run_id?: string | null;
+  request_id?: string | null;
 }): MaterializeOptimizationBasketsInput {
   const { optimization } = args;
   const bestValue =
@@ -98,6 +100,8 @@ export function buildMaterializeInputFromOptimization(args: {
     best_quality: bestQuality,
     recommendation,
     incentives: [],
+    agent_run_id: args.agent_run_id ?? null,
+    request_id: args.request_id ?? null,
   };
 }
 

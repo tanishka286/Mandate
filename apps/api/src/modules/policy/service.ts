@@ -19,6 +19,7 @@ import {
   PolicyRepository,
   isUniqueConstraintConflict,
 } from "./repository.js";
+import { AuditService } from "../audit/service.js";
 import {
   POLICY_VERSION,
   policyEvaluateRequestSchema,
@@ -60,6 +61,7 @@ export class PolicyService {
     private readonly mandateService = new MandateService(),
     private readonly catalog: PolicyCatalogPort = new SupabasePolicyCatalogAdapter(),
     private readonly incentives: IncentivePort = new FailClosedIncentiveAdapter(),
+    private readonly auditService = new AuditService(),
   ) {}
 
   /**
@@ -467,6 +469,28 @@ export class PolicyService {
         idempotency_key: idempotencyKey,
         request_fingerprint: fingerprint,
       });
+
+      await this.auditService.recordPolicyDecision(
+        {
+          user_id: input.user_id,
+          mandate_id: input.mandate_id,
+          basket_id: input.basket_id,
+          policy_decision_id: row.policy_decision_id,
+          request_id: input.request_id,
+        },
+        {
+          policy_decision_id: row.policy_decision_id,
+          decision,
+          reason_code,
+          gross_amount_minor: amounts.gross_amount_minor,
+          discount_amount_minor: amounts.discount_amount_minor,
+          final_payable_minor: amounts.final_payable_minor,
+          max_spend_minor: amounts.max_spend_minor,
+          policy_version: POLICY_VERSION,
+          evaluated_at: evaluatedAt,
+        },
+      );
+
       return this.rowToResult(row, input.request_id);
     } catch (error) {
       if (!isUniqueConstraintConflict(error)) {

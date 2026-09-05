@@ -4,6 +4,7 @@ import { parseOrThrow } from "../../shared/validation/index.js";
 import { MandateService } from "../mandate/service.js";
 import { SessionsRepository } from "../sessions/repository.js";
 import { userIdSchema as sessionUserIdSchema } from "../sessions/schema.js";
+import { AuditService } from "../audit/service.js";
 import { IntentsRepository } from "./repository.js";
 import {
   createShoppingIntentBodySchema,
@@ -26,12 +27,14 @@ export class IntentsService {
     private readonly intentsRepository = new IntentsRepository(),
     private readonly sessionsRepository = new SessionsRepository(),
     private readonly mandateService = new MandateService(),
+    private readonly auditService = new AuditService(),
   ) {}
 
   async createIntent(
     userId: string,
     sessionId: string,
     body: unknown,
+    requestId?: string,
   ): Promise<CreateShoppingIntentData> {
     parseOrThrow(sessionUserIdSchema, userId);
     parseOrThrow(sessionIdSchema, sessionId);
@@ -58,6 +61,21 @@ export class IntentsService {
     });
 
     const persisted = this.toShoppingIntent(row);
+
+    await this.auditService.recordIntentReceived(
+      {
+        user_id: userId,
+        session_id: session.session_id,
+        mandate_id: mandate.mandate_id,
+        request_id: requestId ?? null,
+      },
+      {
+        intent_id: persisted.intent_id,
+        goal_category: persisted.category,
+        budget_minor: persisted.budget_minor,
+      },
+    );
+
     return parseOrThrow(createShoppingIntentDataSchema, {
       intent_id: persisted.intent_id,
       session_id: persisted.session_id,

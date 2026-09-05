@@ -183,11 +183,15 @@ describe("CheckoutService (Phase 8 Step 4)", () => {
   });
 
   function createService() {
+    const mockAuditService = {
+      recordRazorpayOrderCreated: vi.fn().mockResolvedValue(undefined),
+    };
     return new CheckoutService(
       mockPaymentsRepo as never,
       mockBasketService as never,
       mockPolicyRevalidation as never,
       mockRazorpayAdapter as never,
+      mockAuditService as never,
       mockDb as never,
     );
   }

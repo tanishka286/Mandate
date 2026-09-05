@@ -13,6 +13,7 @@ import {
   selectBasket,
 } from "@/services/api-client";
 import { CheckoutPaymentPanel } from "@/components/CheckoutPaymentPanel";
+import { AuditTrailPanel } from "@/components/AuditTrailPanel";
 
 function formatInr(minor: number): string {
   const rupees = (minor / 100).toFixed(2);
@@ -434,6 +435,10 @@ export function BasketSelectionExperience(props: {
         <p className="text-sm text-red-300" role="alert">
           {error}
         </p>
+      ) : null}
+
+      {canCallApi && props.sessionId && props.token ? (
+        <AuditTrailPanel sessionId={props.sessionId} token={props.token} />
       ) : null}
 
       <footer className="flex flex-wrap items-center gap-3 border-t border-white/10 pt-6 text-sm text-slate-400">

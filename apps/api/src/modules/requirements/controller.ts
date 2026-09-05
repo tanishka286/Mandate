@@ -17,7 +17,11 @@ export class RequirementsController {
   extract = async (req: Request, res: Response): Promise<void> => {
     const userId = req.user!.id;
     const { intent_id } = parseOrThrow(intentIdParamsSchema, req.params);
-    const data = await this.service.extractRequirements(userId, intent_id);
+    const data = await this.service.extractRequirements(
+      userId,
+      intent_id,
+      req.requestId,
+    );
     const body: ApiSuccessResponse<RequirementExtractionResponseData> = {
       data,
       meta: { request_id: req.requestId },

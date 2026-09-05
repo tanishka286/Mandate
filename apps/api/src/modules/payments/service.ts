@@ -297,6 +297,18 @@ export class PaymentsService {
         amount_minor: persistenceResult.payment.amount_minor,
         verified_at: persistenceResult.payment.verified_at ?? verifiedAt,
       });
+
+      await this.auditService.recordOrderConfirmed(
+        auditContext,
+        {
+          order_id: persistenceResult.order.order_id,
+          payment_id: persistenceResult.payment.payment_id,
+          order_status: persistenceResult.order.status,
+          payment_status: persistenceResult.payment.status,
+          verified_amount_minor: persistenceResult.payment.amount_minor,
+          confirmed_at: persistenceResult.payment.verified_at ?? verifiedAt,
+        },
+      );
     }
 
     // 11. Return sanitized verification result

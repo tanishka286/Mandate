@@ -39,6 +39,7 @@ describe("PaymentsService payment verification audit events (Phase 8 Step 6)", (
     recordPaymentVerified: ReturnType<typeof vi.fn>;
     recordPaymentFailed: ReturnType<typeof vi.fn>;
     recordAmountMismatch: ReturnType<typeof vi.fn>;
+    recordOrderConfirmed: ReturnType<typeof vi.fn>;
   };
 
   let service: PaymentsService;
@@ -109,6 +110,7 @@ describe("PaymentsService payment verification audit events (Phase 8 Step 6)", (
       recordPaymentVerified: vi.fn().mockResolvedValue(undefined),
       recordPaymentFailed: vi.fn().mockResolvedValue(undefined),
       recordAmountMismatch: vi.fn().mockResolvedValue(undefined),
+      recordOrderConfirmed: vi.fn().mockResolvedValue(undefined),
     };
 
     service = new PaymentsService(

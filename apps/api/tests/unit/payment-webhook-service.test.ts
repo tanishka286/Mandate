@@ -87,6 +87,7 @@ describe("RazorpayWebhookService (Phase 8 Step 7)", () => {
     recordPaymentVerified: ReturnType<typeof vi.fn>;
     recordPaymentFailed: ReturnType<typeof vi.fn>;
     recordAmountMismatch: ReturnType<typeof vi.fn>;
+    recordOrderConfirmed: ReturnType<typeof vi.fn>;
   };
 
   let service: RazorpayWebhookService;
@@ -176,6 +177,7 @@ describe("RazorpayWebhookService (Phase 8 Step 7)", () => {
       recordPaymentVerified: vi.fn().mockResolvedValue(undefined),
       recordPaymentFailed: vi.fn().mockResolvedValue(undefined),
       recordAmountMismatch: vi.fn().mockResolvedValue(undefined),
+      recordOrderConfirmed: vi.fn().mockResolvedValue(undefined),
     };
 
     service = new RazorpayWebhookService(

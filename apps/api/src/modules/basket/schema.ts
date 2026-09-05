@@ -266,6 +266,9 @@ export const materializeOptimizationBasketsInputSchema = z
       )
       .optional()
       .default([]),
+    /** Phase 9 audit correlation — optional, not used for authorization. */
+    agent_run_id: z.string().uuid().nullable().optional(),
+    request_id: z.string().nullable().optional(),
   })
   .strict();
 

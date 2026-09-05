@@ -18,6 +18,7 @@ import {
 } from "../policy/revalidation-service.js";
 import { checkoutInputSchema, type ValidatedCheckoutInput } from "./schema.js";
 import type { CheckoutResult } from "./types.js";
+import { AuditService } from "../audit/service.js";
 
 /**
  * Phase 8 Step 4 — Internal Checkout Service.
@@ -45,6 +46,7 @@ export class CheckoutService {
     private readonly basketService = new BasketService(),
     private readonly policyRevalidationService: PolicyRevalidationPort = new PolicyRevalidationService(),
     private readonly razorpayAdapter = new RazorpayServerAdapter(),
+    private readonly auditService = new AuditService(),
     private readonly db = getSupabaseClient(),
   ) {}
 
@@ -361,6 +363,25 @@ export class CheckoutService {
       if (persisted.replayed && persisted.idempotency.response_json) {
         return persisted.idempotency.response_json as unknown as CheckoutResult;
       }
+
+      await this.auditService.recordRazorpayOrderCreated(
+        {
+          user_id: input.user_id,
+          session_id: sessionId,
+          mandate_id: policyResult.mandate_id,
+          basket_id: policyResult.basket_id,
+          policy_decision_id: policyResult.policy_decision_id,
+          order_id: orderId,
+          request_id: input.request_id ?? revalRequestId,
+        },
+        {
+          order_id: orderId,
+          razorpay_order_id: razorpayOrder.razorpay_order_id,
+          authorized_amount_minor: policyResult.final_payable_minor,
+          currency: "INR",
+          policy_decision_id: policyResult.policy_decision_id,
+        },
+      );
     } catch (persistenceError) {
       if (
         isAppError(persistenceError) &&

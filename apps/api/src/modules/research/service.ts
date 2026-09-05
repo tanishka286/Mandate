@@ -12,6 +12,8 @@ import {
   selectEvidenceForCandidate,
 } from "./quality-assessor.js";
 import { ResearchRepository } from "./repository.js";
+import { AuditService } from "../audit/service.js";
+import type { WorkflowAuditContext } from "../audit/types.js";
 import {
   evidenceIdSchema,
   isCurrentEvidence,
@@ -30,7 +32,10 @@ import type { QualityEvidenceRow } from "./types.js";
  * Expired evidence is excluded from research/assessment use.
  */
 export class ResearchService {
-  constructor(private readonly repository = new ResearchRepository()) {}
+  constructor(
+    private readonly repository = new ResearchRepository(),
+    private readonly auditService = new AuditService(),
+  ) {}
 
   async getEvidenceById(evidenceId: string): Promise<QualityEvidence> {
     parseOrThrow(evidenceIdSchema, evidenceId);
@@ -113,6 +118,7 @@ export class ResearchService {
   async assessCandidateQuality(
     rawInput: AssessCandidateQualityInput,
     now: Date = new Date(),
+    auditContext?: WorkflowAuditContext,
   ): Promise<CandidateQualityAssessment> {
     const input = parseOrThrow(assessCandidateQualityInputSchema, rawInput);
 
@@ -136,7 +142,20 @@ export class ResearchService {
       current,
     );
 
-    return assessFromCurrentEvidence(input, scoped);
+    const assessment = assessFromCurrentEvidence(input, scoped);
+
+    if (auditContext) {
+      await this.auditService.recordProductResearched(auditContext, {
+        product_id: input.product_id,
+        sku_id: input.sku_id ?? null,
+        evidence_ids: scoped.map((e) => e.evidence_id),
+        quality_signal: assessment.quality_signal,
+        confidence: assessment.confidence,
+        source_type: scoped[0]?.source_type ?? null,
+      });
+    }
+
+    return assessment;
   }
 
   /** Current (non-expired) full evidence rows for a product. */

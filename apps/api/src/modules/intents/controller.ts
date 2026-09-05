@@ -21,6 +21,7 @@ export class IntentsController {
       userId,
       session_id,
       req.body,
+      req.requestId,
     );
     const body: ApiSuccessResponse<CreateShoppingIntentData> = {
       data,

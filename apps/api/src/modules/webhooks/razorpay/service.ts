@@ -513,6 +513,15 @@ export class RazorpayWebhookService {
         amount_minor: persistence.payment.amount_minor,
         verified_at: persistence.payment.verified_at ?? verifiedAt,
       });
+
+      await this.auditService.recordOrderConfirmed(auditContext, {
+        order_id: persistence.order.order_id,
+        payment_id: persistence.payment.payment_id,
+        order_status: persistence.order.status,
+        payment_status: persistence.payment.status,
+        verified_amount_minor: persistence.payment.amount_minor,
+        confirmed_at: persistence.payment.verified_at ?? verifiedAt,
+      });
     }
 
     await this.finalizeWebhookEvent(webhookEventId, {

@@ -35,6 +35,7 @@ export class BasketController {
       userId,
       session_id,
       req.body,
+      req.requestId,
     );
     const body: ApiSuccessResponse<BasketSelectionData> = {
       data,

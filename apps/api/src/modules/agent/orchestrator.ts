@@ -28,6 +28,7 @@ import {
   toPersistedOptimizationRef,
   type OptimizationMaterializer,
 } from "./materialize-from-optimization.js";
+import { AuditService } from "../audit/service.js";
 
 /**
  * Bounded agent orchestration state machine (Phase 6).
@@ -93,10 +94,15 @@ export type AgentOrchestratorDeps = {
   llm: StructuredLlmProvider;
   /** Server-side BasketService (or test double) — never an AI tool. */
   materializer: OptimizationMaterializer;
+  auditService?: AuditService;
 };
 
 export class AgentOrchestrator {
-  constructor(private readonly deps: AgentOrchestratorDeps) {}
+  private readonly auditService: AuditService;
+
+  constructor(private readonly deps: AgentOrchestratorDeps) {
+    this.auditService = deps.auditService ?? new AuditService();
+  }
 
   async run(rawRequest: unknown): Promise<AgentPlanningResult> {
     const request = parseOrThrow(agentPlanningRequestSchema, rawRequest);
@@ -195,6 +201,33 @@ export class AgentOrchestrator {
                 this.deps.context,
               );
               record(evidence);
+              if (evidence.status === "OK" && evidence.data) {
+                const evidenceData = evidence.data as {
+                  evidence?: Array<{
+                    evidence_id: string;
+                    source_type?: string;
+                    quality_signal?: string | null;
+                    confidence?: number | null;
+                  }>;
+                };
+                const itemsList = evidenceData.evidence ?? [];
+                await this.auditService.recordProductResearched(
+                  {
+                    user_id: request.user_id,
+                    session_id: request.session_id,
+                    agent_run_id: request.agent_run_id,
+                    mandate_id: mandate.mandate_id,
+                    request_id: request.request_id,
+                  },
+                  {
+                    product_id: item.product_id,
+                    evidence_ids: itemsList.map((e) => e.evidence_id),
+                    quality_signal: itemsList[0]?.quality_signal ?? null,
+                    confidence: itemsList[0]?.confidence ?? null,
+                    source_type: itemsList[0]?.source_type ?? null,
+                  },
+                );
+              }
             }
           }
         }
@@ -241,6 +274,8 @@ export class AgentOrchestrator {
             intent_id: request.intent_id ?? null,
             mandate_id: mandate.mandate_id,
             optimization: lastOptimization,
+            agent_run_id: request.agent_run_id,
+            request_id: request.request_id,
           });
           const sessionBaskets =
             await this.deps.materializer.materializeOptimizationBaskets(
@@ -292,6 +327,60 @@ export class AgentOrchestrator {
             this.deps.context,
           );
           record(incentiveResult);
+          if (incentiveResult.status === "OK" && incentiveResult.data) {
+            const incentiveData = incentiveResult.data as {
+              vouchers?: {
+                evaluations?: Array<{
+                  voucher_id?: string;
+                  incentive_id?: string;
+                  decision?: string;
+                  actual_saving_minor?: number | null;
+                  future_value_minor?: number | null;
+                  reason?: string | null;
+                }>;
+              };
+              loyalty?: {
+                evaluations?: Array<{
+                  reward_id?: string;
+                  incentive_id?: string;
+                  decision?: string;
+                  actual_saving_minor?: number | null;
+                  future_value_minor?: number | null;
+                  reason?: string | null;
+                }>;
+              };
+            };
+            const auditCtx = {
+              user_id: request.user_id,
+              session_id: request.session_id,
+              agent_run_id: request.agent_run_id,
+              mandate_id: mandate.mandate_id,
+              optimization_run_id: persisted_baskets?.optimization_run_id ?? null,
+              request_id: request.request_id,
+            };
+            for (const evaluation of incentiveData.vouchers?.evaluations ?? []) {
+              const incentiveId =
+                evaluation.incentive_id ?? evaluation.voucher_id ?? "unknown";
+              await this.auditService.recordVoucherEvaluated(auditCtx, {
+                incentive_id: incentiveId,
+                decision: evaluation.decision ?? "UNKNOWN",
+                actual_saving_minor: evaluation.actual_saving_minor ?? null,
+                future_value_minor: evaluation.future_value_minor ?? null,
+                reason: evaluation.reason ?? null,
+              });
+            }
+            for (const evaluation of incentiveData.loyalty?.evaluations ?? []) {
+              const incentiveId =
+                evaluation.incentive_id ?? evaluation.reward_id ?? "unknown";
+              await this.auditService.recordLoyaltyEvaluated(auditCtx, {
+                incentive_id: incentiveId,
+                decision: evaluation.decision ?? "UNKNOWN",
+                actual_saving_minor: evaluation.actual_saving_minor ?? null,
+                future_value_minor: evaluation.future_value_minor ?? null,
+                reason: evaluation.reason ?? null,
+              });
+            }
+          }
         }
 
         stage = "COMPARISON";

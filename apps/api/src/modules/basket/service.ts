@@ -14,6 +14,7 @@ import {
   type QuoteAppliedIncentive,
 } from "../quote/index.js";
 import { BasketRepository } from "./repository.js";
+import { AuditService } from "../audit/service.js";
 import {
   basketQuoteDataSchema,
   basketSelectionDataSchema,
@@ -53,6 +54,7 @@ export class BasketService {
   constructor(
     private readonly repository = new BasketRepository(),
     private readonly sessionsRepository = new SessionsRepository(),
+    private readonly auditService = new AuditService(),
   ) {}
 
   /**
@@ -115,7 +117,37 @@ export class BasketService {
       });
     }
 
-    return this.getSessionBaskets(userId, session.session_id);
+    const sessionBaskets = await this.getSessionBaskets(userId, session.session_id);
+    const auditContext = {
+      user_id: userId,
+      session_id: session.session_id,
+      mandate_id: input.mandate_id ?? null,
+      optimization_run_id: run.optimization_run_id,
+      agent_run_id: input.agent_run_id ?? null,
+      request_id: input.request_id ?? null,
+    };
+
+    for (const view of [sessionBaskets.best_value, sessionBaskets.best_quality]) {
+      if (!view) continue;
+      await this.auditService.recordBasketCreated(auditContext, {
+        basket_id: view.basket_id,
+        basket_type: view.basket_type,
+        gross_amount_minor: view.gross_amount_minor,
+        discount_amount_minor: view.discount_amount_minor,
+        final_payable_minor: view.final_payable_minor,
+      });
+    }
+
+    if (sessionBaskets.recommendation) {
+      await this.auditService.recordBasketRecommended(auditContext, {
+        recommended_basket_id: sessionBaskets.recommendation.recommended_basket_id,
+        recommended_basket_type: sessionBaskets.recommendation.recommended_basket_type,
+        reason: sessionBaskets.recommendation.reason,
+        tradeoff_summary: sessionBaskets.recommendation.tradeoff_summary,
+      });
+    }
+
+    return sessionBaskets;
   }
 
   async getSessionBaskets(
@@ -205,6 +237,7 @@ export class BasketService {
     userId: string,
     sessionId: string,
     body: unknown,
+    requestId?: string,
   ): Promise<BasketSelectionData> {
     parseOrThrow(sessionUserIdSchema, userId);
     parseOrThrow(sessionIdParamsSchema, { session_id: sessionId });
@@ -232,6 +265,21 @@ export class BasketService {
       selection_source: input.selection_source,
       selected_at: now,
     });
+
+    await this.auditService.recordBasketSelected(
+      {
+        user_id: userId,
+        session_id: sessionId,
+        basket_id: basket.basket_id,
+        optimization_run_id: basket.optimization_run_id,
+        request_id: requestId ?? null,
+      },
+      {
+        selection_id: row.selection_id,
+        basket_id: basket.basket_id,
+        selection_source: input.selection_source,
+      },
+    );
 
     return this.toSelectionData(row);
   }
@@ -329,6 +377,25 @@ export class BasketService {
       status: "CURRENT",
       request_id: requestId ?? null,
     });
+
+    await this.auditService.recordFreshQuote(
+      {
+        user_id: userId,
+        session_id: basket.session_id,
+        basket_id: basket.basket_id,
+        optimization_run_id: basket.optimization_run_id,
+        request_id: requestId ?? null,
+      },
+      {
+        basket_id: basket.basket_id,
+        quote_version: result.quote_version,
+        gross_amount_minor: result.gross_amount_minor,
+        discount_amount_minor: result.discount_amount_minor,
+        final_payable_minor: result.final_payable_minor,
+        basket_state_version: basket.state_version,
+        selection_id: selectionId,
+      },
+    );
 
     return this.toQuoteData(quoteRow, result.lines, result.applied_incentives);
   }

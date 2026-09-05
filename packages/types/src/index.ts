@@ -371,3 +371,25 @@ export interface CheckoutResult {
   quote_version: string;
   request_id: string;
 }
+
+/** Phase 9 session audit trail event. */
+export interface SessionAuditEventView {
+  audit_event_id: string;
+  event_type: string;
+  occurred_at: IsoUtcTimestamp;
+  user_id: string | null;
+  session_id: string | null;
+  agent_run_id: string | null;
+  mandate_id: string | null;
+  optimization_run_id: string | null;
+  basket_id: string | null;
+  policy_decision_id: string | null;
+  order_id: string | null;
+  payment_id: string | null;
+  event_data: Record<string, unknown>;
+}
+
+export interface SessionAuditTrailData {
+  session_id: string;
+  events: SessionAuditEventView[];
+}

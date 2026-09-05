@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { BasketService } from "../../src/modules/basket/service.js";
+import { AuditService } from "../../src/modules/audit/service.js";
 import type { BasketRepository } from "../../src/modules/basket/repository.js";
 import type { SessionsRepository } from "../../src/modules/sessions/repository.js";
 import type {
@@ -512,6 +513,38 @@ describe("Phase 7 — BasketService selection & quote", () => {
     expect(quote.payment_created).toBe(false);
     expect(quote.order_created).toBe(false);
     expect(quote.quote_version.startsWith("quote-")).toBe(true);
+  });
+
+  it("6b. fresh quote emits FRESH_QUOTE audit event", async () => {
+    const auditSpy = vi
+      .spyOn(AuditService.prototype, "recordFreshQuote")
+      .mockResolvedValue(undefined);
+
+    const quote = await service.createFreshQuote(
+      userA,
+      basketValueId,
+      {},
+      "req-fresh-quote-audit",
+    );
+
+    expect(auditSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user_id: userA,
+        session_id: sessionA,
+        basket_id: basketValueId,
+        request_id: "req-fresh-quote-audit",
+      }),
+      expect.objectContaining({
+        basket_id: basketValueId,
+        quote_version: quote.quote_version,
+        gross_amount_minor: quote.gross_amount_minor,
+        discount_amount_minor: quote.discount_amount_minor,
+        final_payable_minor: quote.final_payable_minor,
+        basket_state_version: 1,
+      }),
+    );
+
+    auditSpy.mockRestore();
   });
 
   it("7. price change causes fresh price", async () => {

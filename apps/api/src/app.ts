@@ -4,6 +4,7 @@ import helmet from "helmet";
 import { API_PREFIX } from "@mandate/config";
 import { getEnv, loadEnv } from "./config/env.js";
 import { requestIdMiddleware } from "./middleware/request-id.js";
+import { requestLogMiddleware } from "./middleware/request-log.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { idempotencyMiddleware } from "./middleware/idempotency.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
@@ -42,6 +43,7 @@ export function createApp() {
   });
 
   app.use(requestIdMiddleware);
+  app.use(requestLogMiddleware);
   app.use(idempotencyMiddleware);
   app.use(authMiddleware);
 

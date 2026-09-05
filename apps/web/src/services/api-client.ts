@@ -4,6 +4,7 @@ import type {
   BasketQuoteData,
   BasketSelectionData,
   HealthData,
+  SessionAuditTrailData,
   SessionBasketsData,
 } from "@mandate/types";
 
@@ -196,4 +197,21 @@ export async function verifyPayment(
     throw await parseApiError(res);
   }
   return (await res.json()) as ApiSuccessResponse<VerifyPaymentResult>;
+}
+
+export async function fetchSessionAudit(
+  sessionId: string,
+  token: string,
+): Promise<ApiSuccessResponse<SessionAuditTrailData>> {
+  const res = await fetch(
+    `${apiConfig.baseUrl}/sessions/${sessionId}/audit`,
+    {
+      headers: authHeaders(token),
+      cache: "no-store",
+    },
+  );
+  if (!res.ok) {
+    throw await parseApiError(res);
+  }
+  return (await res.json()) as ApiSuccessResponse<SessionAuditTrailData>;
 }

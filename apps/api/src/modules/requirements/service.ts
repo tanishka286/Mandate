@@ -20,6 +20,7 @@ import {
   type RequirementExtractionResponseData,
 } from "./extraction-schema.js";
 import { RequirementsRepository } from "./repository.js";
+import { AuditService } from "../audit/service.js";
 import {
   intentIdSchema,
   requirementSchema,
@@ -45,11 +46,13 @@ export class RequirementsService {
     private readonly intentsRepository = new IntentsRepository(),
     private readonly sessionsRepository = new SessionsRepository(),
     private readonly extractor: RequirementExtractor = new DeterministicRequirementExtractor(),
+    private readonly auditService = new AuditService(),
   ) {}
 
   async extractRequirements(
     userId: string,
     intentId: string,
+    requestId?: string,
   ): Promise<RequirementExtractionResponseData> {
     parseOrThrow(userIdSchema, userId);
     parseOrThrow(intentIdSchema, intentId);
@@ -111,6 +114,20 @@ export class RequirementsService {
       status: "PLANNING",
       assumptions_json: extraction.assumptions,
     });
+
+    await this.auditService.recordRequirementsCreated(
+      {
+        user_id: userId,
+        session_id: intent.session_id,
+        mandate_id: intent.mandate_id,
+        request_id: requestId ?? null,
+      },
+      {
+        intent_id: intent.intent_id,
+        requirement_ids: inserted.map((row) => row.requirement_id),
+        assumptions: extraction.assumptions,
+      },
+    );
 
     return this.toSuccessResponse(
       intent.intent_id,
