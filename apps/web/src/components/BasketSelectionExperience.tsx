@@ -12,6 +12,7 @@ import {
   fetchSessionBaskets,
   selectBasket,
 } from "@/services/api-client";
+import { CheckoutPaymentPanel } from "@/components/CheckoutPaymentPanel";
 
 function formatInr(minor: number): string {
   const rupees = (minor / 100).toFixed(2);
@@ -238,6 +239,7 @@ export function BasketSelectionExperience(props: {
   initialData?: SessionBasketsData;
   sessionId?: string;
   token?: string;
+  mandateId?: string;
 }) {
   const [data, setData] = useState<SessionBasketsData>(
     props.initialData ?? DEMO_BASKETS,
@@ -411,9 +413,20 @@ export function BasketSelectionExperience(props: {
             </div>
           </dl>
           <p className="text-xs text-slate-500">
-            Checkout / Razorpay is Phase 8. Policy must still evaluate this
-            quote_version.
+            Policy must evaluate this quote_version before checkout.
           </p>
+          {canCallApi && props.mandateId && selection ? (
+            <CheckoutPaymentPanel
+              token={props.token!}
+              mandateId={props.mandateId}
+              selection={selection}
+              quote={quote}
+            />
+          ) : canCallApi && !props.mandateId ? (
+            <p className="text-xs text-amber-300">
+              Pass mandateId (query param or prop) to enable Test Mode checkout.
+            </p>
+          ) : null}
         </section>
       ) : null}
 

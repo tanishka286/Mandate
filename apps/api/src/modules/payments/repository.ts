@@ -23,6 +23,10 @@ import type {
   AtomicCheckoutPersistenceResult,
   VerifyPaymentPersistenceAtomicInput,
   AtomicPaymentVerificationPersistenceResult,
+  ClaimWebhookEventAtomicInput,
+  AtomicWebhookEventClaimResult,
+  ProcessWebhookPaymentFailureAtomicInput,
+  AtomicWebhookPaymentFailureResult,
 } from "./types.js";
 
 function mapOrderRow(row: OrderRow): Order {
@@ -708,6 +712,115 @@ export class PaymentsRepository {
       order: mapOrderRow(payload.order),
       payment: mapPaymentRow(payload.payment),
       replayed: Boolean(payload.replayed),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 7. Atomic Webhook Event Claim (Phase 8 Step 7)
+  // ---------------------------------------------------------------------------
+
+  async claimWebhookEventAtomic(
+    input: ClaimWebhookEventAtomicInput,
+  ): Promise<AtomicWebhookEventClaimResult> {
+    const db = getSupabaseClient();
+
+    const { data, error } = await db.rpc("claim_razorpay_webhook_event_atomic", {
+      p_event_id: input.event_id,
+      p_event_type: input.event_type,
+      p_payload_hash: input.payload_hash ?? null,
+      p_payload_json: input.payload_json ?? null,
+    });
+
+    if (error) {
+      throw mapDatabaseError(error, "Failed to atomically claim webhook event");
+    }
+
+    const payload = data as {
+      webhook_event: RazorpayWebhookEventRow;
+      claimed: boolean;
+      already_processed: boolean;
+      is_duplicate_delivery: boolean;
+    };
+
+    return {
+      webhook_event: mapWebhookEventRow(payload.webhook_event),
+      claimed: Boolean(payload.claimed),
+      already_processed: Boolean(payload.already_processed),
+      is_duplicate_delivery: Boolean(payload.is_duplicate_delivery),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 8. Atomic Webhook Payment Failure (Phase 8 Step 7)
+  // ---------------------------------------------------------------------------
+
+  async processWebhookPaymentFailureAtomic(
+    input: ProcessWebhookPaymentFailureAtomicInput,
+  ): Promise<AtomicWebhookPaymentFailureResult> {
+    const db = getSupabaseClient();
+
+    const { data, error } = await db.rpc(
+      "process_webhook_payment_failure_atomic",
+      {
+        p_order_id: input.order_id,
+        p_payment_id: input.payment_id ?? null,
+        p_razorpay_payment_id: input.razorpay_payment_id ?? null,
+        p_failure_code: input.failure_code ?? null,
+      },
+    );
+
+    if (error) {
+      if (error.message?.includes("PAYMENT_ALREADY_FAILED_CONFLICT")) {
+        throw new AppError({
+          code: ErrorCodes.CONFLICT,
+          message:
+            "Payment is already failed with a different provider payment ID",
+          statusCode: 409,
+          details: { order_id: input.order_id },
+        });
+      }
+      if (error.message?.includes("INVALID_STATE_TRANSITION")) {
+        throw new AppError({
+          code: ErrorCodes.CONFLICT,
+          message: error.message,
+          statusCode: 409,
+          details: { order_id: input.order_id },
+        });
+      }
+      if (error.message?.includes("ORDER_NOT_FOUND")) {
+        throw new AppError({
+          code: ErrorCodes.NOT_FOUND,
+          message: "Order not found",
+          statusCode: 404,
+          details: { order_id: input.order_id },
+        });
+      }
+      if (error.message?.includes("PAYMENT_NOT_FOUND")) {
+        throw new AppError({
+          code: ErrorCodes.NOT_FOUND,
+          message: "Payment not found for order",
+          statusCode: 404,
+          details: { order_id: input.order_id },
+        });
+      }
+      throw mapDatabaseError(
+        error,
+        "Failed to atomically persist webhook payment failure",
+      );
+    }
+
+    const payload = data as {
+      order: OrderRow;
+      payment: PaymentRow;
+      replayed: boolean;
+      downgrade_prevented: boolean;
+    };
+
+    return {
+      order: mapOrderRow(payload.order),
+      payment: mapPaymentRow(payload.payment),
+      replayed: Boolean(payload.replayed),
+      downgrade_prevented: Boolean(payload.downgrade_prevented),
     };
   }
 }

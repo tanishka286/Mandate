@@ -10,6 +10,7 @@ import { intentRequirementsRouter } from "../modules/requirements/routes.js";
 import { basketRouter } from "../modules/basket/index.js";
 import { checkoutRouter } from "../modules/checkout/index.js";
 import { paymentsRouter } from "../modules/payments/index.js";
+import { razorpayWebhookRouter } from "../modules/webhooks/index.js";
 import { healthHandler } from "./health.js";
 
 export const v1Router = Router();
@@ -24,3 +25,4 @@ v1Router.use("/intents", intentRequirementsRouter);
 v1Router.use("/baskets", basketRouter);
 v1Router.use("/checkout", checkoutRouter);
 v1Router.use("/payments", paymentsRouter);
+v1Router.use("/webhooks/razorpay", razorpayWebhookRouter);

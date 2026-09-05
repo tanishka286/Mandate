@@ -173,6 +173,7 @@ export interface VerifyPaymentRequestBody {
 /** Service input for payment verification. */
 export interface VerifyPaymentInput extends VerifyPaymentRequestBody {
   user_id: string;
+  request_id?: string | null;
 }
 
 /** Successful verification result payload (Doc 08). */
@@ -199,5 +200,51 @@ export interface AtomicPaymentVerificationPersistenceResult {
   order: Order;
   payment: Payment;
   replayed: boolean;
+}
+
+/** Input for atomic webhook event claim (Phase 8 Step 7). */
+export interface ClaimWebhookEventAtomicInput {
+  event_id: string;
+  event_type: string;
+  payload_hash?: string | null;
+  payload_json?: Record<string, unknown> | null;
+}
+
+/** Output of atomic webhook event claim (Phase 8 Step 7). */
+export interface AtomicWebhookEventClaimResult {
+  webhook_event: RazorpayWebhookEventRecord;
+  claimed: boolean;
+  already_processed: boolean;
+  is_duplicate_delivery: boolean;
+}
+
+/** Input for atomic webhook payment failure persistence (Phase 8 Step 7). */
+export interface ProcessWebhookPaymentFailureAtomicInput {
+  order_id: string;
+  payment_id?: string | null;
+  razorpay_payment_id?: string | null;
+  failure_code?: string | null;
+}
+
+/** Output of atomic webhook payment failure persistence (Phase 8 Step 7). */
+export interface AtomicWebhookPaymentFailureResult {
+  order: Order;
+  payment: Payment;
+  replayed: boolean;
+  downgrade_prevented: boolean;
+}
+
+/** Razorpay webhook processing result for HTTP response. */
+export interface WebhookProcessResult {
+  event_id: string;
+  event_type: string;
+  outcome:
+    | "PROCESSED"
+    | "IGNORED"
+    | "DUPLICATE"
+    | "CONCURRENT_NOOP"
+    | "FAILED";
+  payment_status?: PaymentState;
+  order_status?: OrderState;
 }
 

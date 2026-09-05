@@ -27,7 +27,20 @@ export function createApp() {
       exposedHeaders: ["X-Request-ID"],
     }),
   );
-  app.use(express.json({ limit: "1mb" }));
+
+  // Razorpay webhooks require the exact raw body bytes for signature verification.
+  app.use(
+    `${API_PREFIX}/webhooks/razorpay`,
+    express.raw({ type: "application/json", limit: "1mb" }),
+  );
+  app.use((req, res, next) => {
+    if (req.originalUrl.startsWith(`${API_PREFIX}/webhooks/razorpay`)) {
+      next();
+      return;
+    }
+    express.json({ limit: "1mb" })(req, res, next);
+  });
+
   app.use(requestIdMiddleware);
   app.use(idempotencyMiddleware);
   app.use(authMiddleware);

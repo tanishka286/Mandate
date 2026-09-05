@@ -110,6 +110,7 @@ describe("POST /api/v1/payments/verify (Phase 8 Step 6)", () => {
     // Assert service called with trusted user id from JWT
     expect(verifySpy).toHaveBeenCalledWith({
       user_id: userId,
+      request_id: expect.any(String),
       order_id: orderId,
       razorpay_order_id: razorpayOrderId,
       razorpay_payment_id: razorpayPaymentId,
@@ -411,13 +412,14 @@ describe("POST /api/v1/payments/verify (Phase 8 Step 6)", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Scenario 12: Scope Lock Holds (No Webhook Route)
+  // Scenario 12: Webhook Route Mounted (Step 7)
   // ---------------------------------------------------------------------------
-  it("Scenario 12: Scope lock holds: webhook route /api/v1/webhooks/razorpay is not mounted", async () => {
+  it("Scenario 12: webhook route /api/v1/webhooks/razorpay is mounted and rejects missing signature", async () => {
     const webhookRes = await request(app)
       .post("/api/v1/webhooks/razorpay")
-      .send({});
+      .set("Content-Type", "application/json")
+      .send({ id: "evt_test", event: "payment.captured" });
 
-    expect(webhookRes.status).toBe(404);
+    expect(webhookRes.status).toBe(401);
   });
 });

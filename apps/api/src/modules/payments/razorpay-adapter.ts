@@ -81,6 +81,7 @@ export interface RazorpayServerAdapterOptions {
   client?: RazorpayClientLike;
   keyId?: string;
   keySecret?: string;
+  webhookSecret?: string;
   env?: Env["RAZORPAY_ENV"];
 }
 
@@ -129,6 +130,7 @@ export function buildOrderReceipt(orderId: string): string {
 export class RazorpayServerAdapter {
   private readonly client: RazorpayClientLike;
   private readonly keySecret?: string;
+  private readonly webhookSecret?: string;
 
   constructor(options?: RazorpayServerAdapterOptions) {
     const env = getEnv();
@@ -145,6 +147,7 @@ export class RazorpayServerAdapter {
     if (options?.client) {
       this.client = options.client;
       this.keySecret = options.keySecret ?? env.RAZORPAY_KEY_SECRET;
+      this.webhookSecret = options.webhookSecret ?? env.RAZORPAY_WEBHOOK_SECRET;
       return;
     }
 
@@ -160,6 +163,7 @@ export class RazorpayServerAdapter {
     }
 
     this.keySecret = keySecret;
+    this.webhookSecret = options?.webhookSecret ?? env.RAZORPAY_WEBHOOK_SECRET;
     this.client = new Razorpay({
       key_id: keyId,
       key_secret: keySecret,
@@ -301,6 +305,57 @@ export class RazorpayServerAdapter {
    * - Fails closed on missing or malformed inputs.
    * - Never logs, exposes, or echoes secrets or signatures.
    */
+  /**
+   * Cryptographically verify a Razorpay webhook signature against the raw body.
+   * Uses RAZORPAY_WEBHOOK_SECRET — never the API key secret.
+   */
+  verifyWebhookSignature(
+    rawBody: string | Buffer,
+    signature: string,
+  ): boolean {
+    if (
+      !signature ||
+      typeof signature !== "string" ||
+      signature.trim().length === 0
+    ) {
+      return false;
+    }
+
+    if (
+      rawBody === undefined ||
+      rawBody === null ||
+      (typeof rawBody === "string" && rawBody.length === 0) ||
+      (Buffer.isBuffer(rawBody) && rawBody.length === 0)
+    ) {
+      return false;
+    }
+
+    if (!this.webhookSecret) {
+      throw new AppError({
+        code: ErrorCodes.INTERNAL_ERROR,
+        message: "Razorpay webhook secret is not configured",
+        statusCode: 500,
+      });
+    }
+
+    try {
+      const expectedSignature = createHmac("sha256", this.webhookSecret)
+        .update(rawBody)
+        .digest("hex");
+
+      const expectedBuffer = Buffer.from(expectedSignature, "utf8");
+      const providedBuffer = Buffer.from(signature.trim(), "utf8");
+
+      if (expectedBuffer.length !== providedBuffer.length) {
+        return false;
+      }
+
+      return timingSafeEqual(expectedBuffer, providedBuffer);
+    } catch {
+      return false;
+    }
+  }
+
   verifyPaymentSignature(input: VerifyPaymentSignatureInput): boolean {
     if (
       !input ||

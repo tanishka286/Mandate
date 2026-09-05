@@ -552,12 +552,13 @@ describe("POST /api/v1/checkout (Phase 8 Step 5)", () => {
 
     expect(verifyRes.status).toBe(400);
 
-    // 3. No webhook routes exist under /api/v1
+    // 3. Webhook route is mounted (Step 7) and rejects unsigned payloads
     const webhookRes = await request(app)
       .post("/api/v1/webhooks/razorpay")
+      .set("Content-Type", "application/json")
       .send({});
 
-    expect(webhookRes.status).toBe(404);
+    expect(webhookRes.status).toBe(401);
   });
 
   // ---------------------------------------------------------------------------

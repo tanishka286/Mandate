@@ -1,13 +1,27 @@
 import { BasketSelectionExperience } from "@/components/BasketSelectionExperience";
 
 /**
- * Phase 7 — User Selection & Fresh Quote UI.
- * Recommendation is guidance only; financial authority stays on the API.
+ * Phase 7 selection + Phase 8 checkout.
+ * Live mode: /select?sessionId=...&token=...&mandateId=...
  */
-export default function SelectPage() {
+export default async function SelectPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    sessionId?: string;
+    token?: string;
+    mandateId?: string;
+  }>;
+}) {
+  const params = await searchParams;
+
   return (
     <main className="min-h-screen">
-      <BasketSelectionExperience />
+      <BasketSelectionExperience
+        sessionId={params.sessionId}
+        token={params.token}
+        mandateId={params.mandateId}
+      />
     </main>
   );
 }

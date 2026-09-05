@@ -42,6 +42,7 @@ export class PaymentsController {
     try {
       result = await this.service.verifyPayment({
         user_id: userId,
+        request_id: req.requestId,
         order_id: body.order_id,
         razorpay_order_id: body.razorpay_order_id,
         razorpay_payment_id: body.razorpay_payment_id,
