@@ -1,7 +1,7 @@
 /**
- * Optimization repository (Phase 0 scaffold).
- * Will communicate with Supabase via the centralized client — no business logic yet.
+ * Optimization repository (Phase 5 Step 1).
+ * Persistence for optimization_run / optimization_candidate is deferred.
  */
 export class OptimizationRepository {
-  // Intentionally empty in Phase 0
+  // Intentionally empty in Step 1
 }

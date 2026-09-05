@@ -2,12 +2,13 @@ import { getEnv } from "../../config/env.js";
 import { logger } from "../../shared/logger/index.js";
 
 /**
- * Ollama client abstraction (Phase 0 foundation only).
- * Does NOT implement agent reasoning, prompts, tools, or planning.
+ * Ollama client abstraction.
+ * Product flows must not treat LLM output as financially authoritative.
+ * Phase 6 orchestration uses this client only via StructuredLlmProvider.
  *
  * AI trust boundary:
  * - AI never accesses Supabase / SQL / Razorpay credentials
- * - All future AI capabilities must go through backend tool adapters
+ * - All AI capabilities must go through backend tool adapters
  */
 
 export interface OllamaClientOptions {

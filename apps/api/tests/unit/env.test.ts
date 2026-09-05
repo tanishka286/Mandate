@@ -21,6 +21,8 @@ describe("env + supabase config", () => {
     expect(env.PORT).toBe(4000);
     expect(env.OLLAMA_MODEL).toBe("qwen3:14b");
     expect(env.OLLAMA_BASE_URL).toBe("http://localhost:11434");
+    expect(env.AGENT_MAX_RECOVERY_ATTEMPTS).toBe(2);
+    expect(env.AGENT_LLM_MAX_RETRIES).toBe(1);
     expect(isSupabaseConfigured(env)).toBe(false);
   });
 

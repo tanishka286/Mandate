@@ -42,12 +42,33 @@ SUPABASE_SERVICE_ROLE_KEY=
 - Location: `supabase/migrations/`
 - Tooling: Supabase SQL migrations (no ORM migrations)
 - Phase 0: minimal `schema_meta` table + `pgcrypto` only
-- Full commerce entities arrive incrementally in later phases
+- Phase 1 Step 1: `category` table (controlled codes)
+- Phase 1 Step 2: `product` table (catalog identity; FK to category; no price/stock)
+- Phase 1 Step 3: `sku` table (pack variant + authoritative `price_minor`; FK to product)
+- Phase 1 Step 4: `stock` table (inventory availability per SKU; FK/PK to sku)
+- Phase 1 Step 5: catalog search over existing tables (no schema change)
+- Phase 1 Step 6: `app_user` + `cart` (ownership/lifecycle; no cart items)
+- Phase 1 Step 7: `cart_item` (Cart → SKU → quantity; no prices/totals)
+- Phase 1 Step 8: cart pricing calculated dynamically from `cart_item.quantity` × current `sku.price_minor` (no persisted totals)
+- Phase 1 Step 9: application order state = `cart.status` (`OPEN_CART` | `CANCELLED`); payment order states deferred to Phase 8
+- Phase 2 Step 1: `mandate` + `mandate_category` (authorization constraints; FK to `app_user`; no policy evaluation yet)
+- Phase 2 Step 3: `policy_decision` (historical ALLOW|DENY; `basket_id` UUID NOT NULL with FK deferred until real `basket`)
+- Phase 2 Step 4: deterministic policy evaluation service (Doc 06 order); no new migration; payment gate deferred
+- Phase 7: `optimization_run` (minimal), `basket`, `basket_item`, `basket_selection`, `basket_quote` (user selection + fresh quote versioning; no orders/payments)
+- Incentive discounts and remaining commerce entities arrive in later phases
 
 ## Seed data
 
 - File: `supabase/seed.sql`
-- Phase 0: minimal metadata only - no grocery catalogs
+- Phase 1 Step 1: seeded MVP categories (`dairy`, `pantry`, `produce`, `beverages`, `household`)
+- Phase 1 Step 2: seeded grocery products (eggs, pasta, pasta sauce, milk, bread)
+- Phase 1 Step 3: seeded SKU packs with deterministic INR `price_minor` values
+- Phase 1 Step 4: seeded stock quantities (includes deliberate out-of-stock SKU)
+- Phase 1 Step 5: search uses seeded catalog rows (no additional seed entities)
+- Phase 1 Step 6: seeded `app_user` + open carts (no cart items)
+- Phase 1 Step 7: cart items are created via API (no seed cart lines)
+- Phase 2 Step 1: seeded Mandates A/B/C (Doc 10) with `grocery` allow-list categories
+- Phase 2 Step 3: no policy_decision seed rows (historical facts are written by the engine later)
 
 ## Security
 

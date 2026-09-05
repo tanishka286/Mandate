@@ -1,9 +1,14 @@
 import type { NextFunction, Request, Response } from "express";
-import { IDEMPOTENCY_KEY_HEADER } from "../shared/constants/index.js";
+import { AppError } from "../shared/errors/index.js";
+import {
+  ErrorCodes,
+  IDEMPOTENCY_KEY_HEADER,
+} from "../shared/constants/index.js";
 
 /**
- * Idempotency foundation for future financial operations.
- * Captures Idempotency-Key when present; does not yet enforce persistence.
+ * Idempotency foundation.
+ * Captures Idempotency-Key when present; does not persist/enforce by itself.
+ * Endpoints that authorize or create financial state must call requireIdempotencyKey.
  */
 export function idempotencyMiddleware(
   req: Request,
@@ -30,4 +35,29 @@ export function getIdempotencyContext(req: Request): IdempotencyContext | null {
     key: req.idempotencyKey,
     requestId: req.requestId,
   };
+}
+
+/**
+ * Require a nonempty Idempotency-Key (Doc 08 §3.6 / §24 for financial auth).
+ * Does not implement replay/dedup persistence — that needs a durable store.
+ */
+export function requireIdempotencyKey(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): void {
+  const key = req.idempotencyKey?.trim();
+  if (!key) {
+    next(
+      new AppError({
+        code: ErrorCodes.IDEMPOTENCY_REQUIRED,
+        message: "Idempotency-Key header is required for this operation.",
+        statusCode: 400,
+        details: { header: IDEMPOTENCY_KEY_HEADER },
+      }),
+    );
+    return;
+  }
+  req.idempotencyKey = key;
+  next();
 }

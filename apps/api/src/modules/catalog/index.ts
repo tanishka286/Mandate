@@ -1,4 +1,62 @@
 export { CatalogController } from "./controller.js";
 export { CatalogService } from "./service.js";
 export { CatalogRepository } from "./repository.js";
-export { catalogRouter } from "./routes.js";
+export { catalogRouter, productsRouter } from "./routes.js";
+export {
+  MVP_CATEGORY_CODES,
+  MVP_CURRENCY,
+  PRODUCT_STATUSES,
+  SKU_STATUSES,
+  CATALOG_SEARCH_DEFAULT_LIMIT,
+  CATALOG_SEARCH_MAX_LIMIT,
+  categoryCodeSchema,
+  categorySchema,
+  categoryListSchema,
+  assertUniqueCategoryCodes,
+  assertUniqueSkuCodes,
+  productStatusSchema,
+  productIdSchema,
+  productSchema,
+  productDetailSchema,
+  productParamsSchema,
+  skuStatusSchema,
+  skuIdSchema,
+  currencySchema,
+  priceMinorSchema,
+  packQuantitySchema,
+  skuSchema,
+  availableQuantitySchema,
+  stockSchema,
+  stockAvailabilitySchema,
+  skuWithStockSchema,
+  catalogSearchQuerySchema,
+  catalogSearchItemSchema,
+  catalogSearchResultSchema,
+} from "./schema.js";
+export type {
+  Category,
+  CategoryCode,
+  CategoryList,
+  Product,
+  ProductDetail,
+  ProductStatus,
+  Sku,
+  SkuStatus,
+  SkuWithStock,
+  Stock,
+  StockAvailability,
+  CatalogSearchQuery,
+  CatalogSearchItem,
+  CatalogSearchResult,
+} from "./schema.js";
+export type {
+  CategoryListData,
+  CategoryRow,
+  ProductRow,
+  ProductWithCategoryRow,
+  SkuRow,
+  SkuInsertInput,
+  StockRow,
+  StockInsertInput,
+  CatalogSearchRow,
+} from "./types.js";

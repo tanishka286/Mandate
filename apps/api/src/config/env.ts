@@ -7,6 +7,8 @@ import {
   DEFAULT_FRONTEND_URL,
   DEFAULT_OLLAMA_BASE_URL,
   DEFAULT_OLLAMA_MODEL,
+  DEFAULT_AGENT_MAX_RECOVERY_ATTEMPTS,
+  DEFAULT_AGENT_LLM_MAX_RETRIES,
 } from "@mandate/config";
 
 /**
@@ -44,6 +46,25 @@ const envSchema = z.object({
 
   OLLAMA_BASE_URL: z.string().url().default(DEFAULT_OLLAMA_BASE_URL),
   OLLAMA_MODEL: z.string().default(DEFAULT_OLLAMA_MODEL),
+
+  /**
+   * Bounded policy-denial recovery attempts for the internal agent orchestrator.
+   * Agent may re-optimize within mandate constraints; never expands the mandate.
+   */
+  AGENT_MAX_RECOVERY_ATTEMPTS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .max(5)
+    .default(DEFAULT_AGENT_MAX_RECOVERY_ATTEMPTS),
+
+  /** Bounded retries when LLM structured output fails Zod validation. */
+  AGENT_LLM_MAX_RETRIES: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .max(3)
+    .default(DEFAULT_AGENT_LLM_MAX_RETRIES),
 
   RAZORPAY_KEY_ID: z.string().optional().default(""),
   RAZORPAY_KEY_SECRET: z.string().optional().default(""),

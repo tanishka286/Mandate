@@ -1,7 +1,7 @@
 /**
- * Optimization service (Phase 0 scaffold).
- * Controllers call services; services call repositories. No DB logic in controllers.
+ * Optimization service (Phase 5 Steps 1–4).
+ * Domain pure functions are module exports; HTTP/persistence remain deferred.
  */
 export class OptimizationService {
-  // Intentionally empty in Phase 0
+  // Intentionally empty through Step 4
 }
