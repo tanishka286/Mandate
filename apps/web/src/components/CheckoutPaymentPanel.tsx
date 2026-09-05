@@ -60,11 +60,16 @@ export function CheckoutPaymentPanel(props: {
     startTransition(async () => {
       try {
         setPaymentState("policy_evaluating");
-        const policyRes = await evaluatePolicy(props.token, {
-          mandate_id: props.mandateId,
-          basket_id: props.selection.basket_id,
-          quote_version: props.quote.quote_version,
-        });
+        const policyIdempotencyKey = crypto.randomUUID();
+        const policyRes = await evaluatePolicy(
+          props.token,
+          policyIdempotencyKey,
+          {
+            mandate_id: props.mandateId,
+            basket_id: props.selection.basket_id,
+            quote_version: props.quote.quote_version,
+          },
+        );
 
         if (policyRes.data.decision !== "ALLOW") {
           setPaymentState("failed");
@@ -73,8 +78,11 @@ export function CheckoutPaymentPanel(props: {
         }
 
         setPaymentState("checkout_creating");
-        const idempotencyKey = crypto.randomUUID();
-        const checkoutRes = await createCheckout(props.token, idempotencyKey, {
+        const checkoutIdempotencyKey = crypto.randomUUID();
+        const checkoutRes = await createCheckout(
+          props.token,
+          checkoutIdempotencyKey,
+          {
           selection_id: props.selection.selection_id,
           policy_decision_id: policyRes.data.policy_decision_id,
         });

@@ -27,16 +27,10 @@ import { getSupabaseClient, resetSupabaseClient } from "../../src/config/supabas
 import { SessionsRepository } from "../../src/modules/sessions/repository.js";
 import { AgentService } from "../../src/modules/agent/index.js";
 import { DeterministicRequirementExtractor } from "../../src/modules/requirements/deterministic-extractor.js";
-import {
-  type BestValueInput,
-  type OptimizationCandidate,
-  type PackCandidateInput,
-  type PackQualitySnapshot,
-} from "../../src/modules/optimization/index.js";
+import { buildSixEggsOptimizationInput } from "../../src/modules/optimization/demo-scenarios.js";
 import {
   SEED_PRODUCT_IDS,
   SEED_SKU_IDS,
-  SIX_EGG_SCENARIO,
 } from "../../src/modules/research/seed-fixtures.js";
 import { createApp } from "../../src/app.js";
 
@@ -92,94 +86,6 @@ function signToken(userId: string): string {
     throw new Error("JWT_SECRET required for E2E-001 hosted test");
   }
   return jwt.sign({ sub: userId }, secret, { expiresIn: "1h" });
-}
-
-function quality(
-  signal: PackQualitySnapshot["quality_signal"],
-): PackQualitySnapshot {
-  return {
-    quality_signal: signal,
-    confidence: 0.9,
-    evidence_refs: ["eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02"],
-    evidence_status: signal === null ? "NONE" : "SUFFICIENT",
-    meets_minimum_quality:
-      signal === null ? false : signal !== "UNACCEPTABLE",
-  };
-}
-
-function candidate(
-  overrides: Partial<OptimizationCandidate> &
-    Pick<
-      OptimizationCandidate,
-      "product_id" | "sku_id" | "product_name" | "sku_code"
-    >,
-): OptimizationCandidate {
-  return {
-    brand: null,
-    category_code: "dairy",
-    product_status: "ACTIVE",
-    sku_status: "ACTIVE",
-    pack_quantity: 6,
-    pack_unit: "pieces",
-    price_minor: 3600,
-    currency: "INR",
-    stock_available: 24,
-    ...overrides,
-  };
-}
-
-function eggsOptimizationInput(): BestValueInput {
-  const packs: PackCandidateInput[] = [
-    {
-      candidate: candidate({
-        product_id: SEED_PRODUCT_IDS.farmEggs,
-        sku_id: SEED_SKU_IDS.farmEggs6,
-        product_name: "Farm Eggs 6",
-        sku_code: SIX_EGG_SCENARIO.poorSixPack.sku_code,
-        pack_quantity: 6,
-        price_minor: SIX_EGG_SCENARIO.poorSixPack.price_minor,
-      }),
-      quality: quality("UNACCEPTABLE"),
-    },
-    {
-      candidate: candidate({
-        product_id: SEED_PRODUCT_IDS.selectEggs,
-        sku_id: SEED_SKU_IDS.selectEggs6,
-        product_name: "Select Eggs 6",
-        sku_code: SIX_EGG_SCENARIO.goodSixPack.sku_code,
-        pack_quantity: 6,
-        price_minor: SIX_EGG_SCENARIO.goodSixPack.price_minor,
-      }),
-      quality: quality("GOOD"),
-    },
-    {
-      candidate: candidate({
-        product_id: SEED_PRODUCT_IDS.farmEggs,
-        sku_id: SEED_SKU_IDS.farmEggs2,
-        product_name: "Farm Eggs 2",
-        sku_code: SIX_EGG_SCENARIO.goodTwoPack.sku_code,
-        pack_quantity: 2,
-        price_minor: SIX_EGG_SCENARIO.goodTwoPack.price_minor,
-      }),
-      quality: quality("GOOD"),
-    },
-  ];
-
-  return {
-    requirements: [
-      {
-        requirement: {
-          item_name: "eggs",
-          target_quantity: 6,
-          unit: "pieces",
-          minimum_quality: "ACCEPTABLE",
-          constraints_json: [],
-        },
-        pack_candidates: packs,
-      },
-    ],
-    budget_minor: 100_000,
-  };
 }
 
 async function ensureHostedSeamFixtures(): Promise<void> {
@@ -369,6 +275,12 @@ describe.skipIf(!hostedReady)("E2E-001 — Hosted happy path", () => {
       useStubLlm: true,
     });
 
+    /**
+     * Catalog research is intentionally skipped here: hosted optimization still
+     * requires server-supplied pack candidates (no client/catalog assembly yet).
+     * Catalog + evidence retrieval is covered by agent hosted seam tests and by
+     * POST /sessions/:id/plan with skip_catalog_research=false for demo goals.
+     */
     const plan = await agent.runPlanning({
       agent_run_id: randomUUID(),
       request_id: `${runTag}-plan`,
@@ -384,16 +296,60 @@ describe.skipIf(!hostedReady)("E2E-001 — Hosted happy path", () => {
       goal: { goal_text: "6 eggs" },
       require_policy_check: false,
       skip_catalog_research: true,
-      optimization_input: eggsOptimizationInput(),
+      optimization_input: buildSixEggsOptimizationInput(100_000),
+      incentives: {
+        basket_context: {
+          gross_amount_minor: 3600,
+          realized_deal_benefit_minor: 0,
+          effective_amount_before_voucher_minor: 3600,
+          feasible: true,
+          prior_rejection_reasons: [],
+          quality_signal: "GOOD",
+          confidence: 0.9,
+          evidence_refs: ["eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02"],
+        },
+      },
     });
 
     expect(plan.outcome).toBe("COMPLETED");
+    expect(plan.run.requirements?.status).toBe("SUCCESS");
+    expect(plan.run.requirements?.requirements?.length).toBeGreaterThan(0);
+    expect(
+      plan.run.tool_calls.some((call) => call.tool === "extract_requirements"),
+    ).toBe(true);
+    expect(
+      plan.run.tool_calls.some((call) => call.tool === "run_optimization"),
+    ).toBe(true);
+    expect(
+      plan.run.tool_calls.some(
+        (call) => call.tool === "evaluate_incentives" && call.status === "OK",
+      ),
+    ).toBe(true);
+    expect(plan.run.comparison?.best_value?.feasible).toBe(true);
+    expect(plan.run.comparison?.best_quality?.feasible).toBe(true);
+    expect(plan.run.comparison?.recommendation?.feasible).toBe(true);
+    expect(plan.run.comparison?.recommendation?.recommended_basket_type).toMatch(
+      /^(BEST_VALUE|BEST_QUALITY)$/,
+    );
+    expect(plan.run.recommendation?.recommended_basket_type).toMatch(
+      /^(BEST_VALUE|BEST_QUALITY)$/,
+    );
+    expect(plan.run.recommendation?.summary.length).toBeGreaterThan(0);
     expect(plan.run.persisted_baskets?.best_value?.basket_id).toMatch(
       /^[0-9a-f-]{36}$/i,
     );
     expect(plan.run.persisted_baskets?.best_quality?.basket_id).toMatch(
       /^[0-9a-f-]{36}$/i,
     );
+    expect(plan.run.persisted_baskets?.best_value?.basket_type).toBe(
+      "BEST_VALUE",
+    );
+    expect(plan.run.persisted_baskets?.best_quality?.basket_type).toBe(
+      "BEST_QUALITY",
+    );
+    expect(
+      plan.run.persisted_baskets?.recommendation?.user_may_select_alternative,
+    ).toBe(true);
     expect(plan.run.policy).toBeNull();
 
     const bvId = plan.run.persisted_baskets!.best_value!.basket_id;
@@ -405,7 +361,13 @@ describe.skipIf(!hostedReady)("E2E-001 — Hosted happy path", () => {
       .set("Authorization", `Bearer ${signToken(USER_A)}`);
     expect(list.status).toBe(200);
     expect(list.body.data.best_value.basket_id).toBe(bvId);
+    expect(list.body.data.best_value.basket_type).toBe("BEST_VALUE");
     expect(list.body.data.best_quality.basket_id).toBe(bqId);
+    expect(list.body.data.best_quality.basket_type).toBe("BEST_QUALITY");
+    expect(list.body.data.recommendation.recommended_basket_type).toMatch(
+      /^(BEST_VALUE|BEST_QUALITY)$/,
+    );
+    expect(list.body.data.recommendation.user_may_select_alternative).toBe(true);
 
     const selectRes = await request(app)
       .post(`/api/v1/sessions/${sessionId}/basket-selections`)
@@ -526,10 +488,16 @@ describe.skipIf(!hostedReady)("E2E-001 — Hosted happy path", () => {
     const eventTypes = (auditRes.body.data.events as Array<{ event_type: string }>).map(
       (e) => e.event_type,
     );
+    expect(eventTypes).toContain("BASKET_CREATED");
+    expect(eventTypes).toContain("BASKET_RECOMMENDED");
+    expect(eventTypes).toContain("VOUCHER_EVALUATED");
+    expect(eventTypes).toContain("LOYALTY_EVALUATED");
     expect(eventTypes).toContain("BASKET_SELECTED");
     expect(eventTypes).toContain("FRESH_QUOTE");
     expect(eventTypes).toContain("POLICY_ALLOW");
     expect(eventTypes).toContain("RAZORPAY_ORDER_CREATED");
+    expect(eventTypes).not.toContain("PAYMENT_VERIFIED");
+    expect(eventTypes).not.toContain("ORDER_CONFIRMED");
 
     const { data: policyRow } = await db
       .from("policy_decision")

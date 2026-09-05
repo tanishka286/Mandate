@@ -112,11 +112,13 @@ const baskets = new Map<string, BasketRow>();
 const itemsByBasket = new Map<string, ItemRow[]>();
 const selections: SelectionRow[] = [];
 const quotes: QuoteRow[] = [];
+const auditEvents: Array<Record<string, unknown>> = [];
 const prices = new Map<string, number>();
 const stock = new Map<string, number>();
 
 let selectionSeq = 0;
 let quoteSeq = 0;
+let auditSeq = 0;
 
 function seed(): void {
   sessions.clear();
@@ -125,10 +127,12 @@ function seed(): void {
   itemsByBasket.clear();
   selections.length = 0;
   quotes.length = 0;
+  auditEvents.length = 0;
   prices.clear();
   stock.clear();
   selectionSeq = 0;
   quoteSeq = 0;
+  auditSeq = 0;
 
   prices.set(skuA, 10000);
   stock.set(skuA, 100);
@@ -488,10 +492,74 @@ vi.mock("../../src/config/supabase.js", () => ({
           basket_id?: string;
           quote_version?: string;
           status?: string;
+          statusIn?: string[];
         } = {};
         let updatePayload: Record<string, unknown> | null = null;
+
+        const applyQuoteUpdate = (): QuoteRow | null => {
+          if (!updatePayload || !filter.basket_id) {
+            return null;
+          }
+          let matched: QuoteRow | null = null;
+          for (let i = 0; i < quotes.length; i++) {
+            const q = quotes[i]!;
+            if (q.basket_id !== filter.basket_id) continue;
+            if (filter.status && q.status !== filter.status) continue;
+            if (
+              filter.quote_version &&
+              q.quote_version !== filter.quote_version
+            ) {
+              continue;
+            }
+            if (filter.statusIn && !filter.statusIn.includes(q.status)) {
+              continue;
+            }
+            const next = { ...q, ...updatePayload } as QuoteRow;
+            quotes[i] = next;
+            matched = next;
+          }
+          return matched;
+        };
+
         const api = {
-          select: () => api,
+          select: (_cols?: string) => {
+            if (updatePayload) {
+              return {
+                maybeSingle: async () => ({
+                  data: applyQuoteUpdate(),
+                  error: null,
+                }),
+              };
+            }
+            const selectApi = {
+              eq: (col: string, val: string) => {
+                if (col === "basket_id") filter.basket_id = val;
+                if (col === "quote_version") filter.quote_version = val;
+                if (col === "status") filter.status = val;
+                return selectApi;
+              },
+              maybeSingle: async () => {
+                const row = quotes.find((q) => {
+                  if (filter.basket_id && q.basket_id !== filter.basket_id) {
+                    return false;
+                  }
+                  if (
+                    filter.quote_version &&
+                    q.quote_version !== filter.quote_version
+                  ) {
+                    return false;
+                  }
+                  if (filter.status && q.status !== filter.status) return false;
+                  if (filter.statusIn && !filter.statusIn.includes(q.status)) {
+                    return false;
+                  }
+                  return true;
+                });
+                return { data: row ?? null, error: null };
+              },
+            };
+            return selectApi;
+          },
           insert: (row: Record<string, unknown>) => ({
             select: () => ({
               single: async () => {
@@ -534,6 +602,10 @@ vi.mock("../../src/config/supabase.js", () => ({
             if (col === "status") filter.status = val;
             return api;
           },
+          in: (col: string, vals: string[]) => {
+            if (col === "status") filter.statusIn = vals;
+            return api;
+          },
           maybeSingle: async () => {
             const row = quotes.find((q) => {
               if (filter.basket_id && q.basket_id !== filter.basket_id) {
@@ -546,6 +618,9 @@ vi.mock("../../src/config/supabase.js", () => ({
                 return false;
               }
               if (filter.status && q.status !== filter.status) return false;
+              if (filter.statusIn && !filter.statusIn.includes(q.status)) {
+                return false;
+              }
               return true;
             });
             return { data: row ?? null, error: null };
@@ -553,14 +628,7 @@ vi.mock("../../src/config/supabase.js", () => ({
           then: async (
             resolve: (v: { data: null; error: null }) => void,
           ) => {
-            if (updatePayload && filter.basket_id) {
-              for (let i = 0; i < quotes.length; i++) {
-                const q = quotes[i]!;
-                if (q.basket_id !== filter.basket_id) continue;
-                if (filter.status && q.status !== filter.status) continue;
-                quotes[i] = { ...q, ...updatePayload } as QuoteRow;
-              }
-            }
+            applyQuoteUpdate();
             resolve({ data: null, error: null });
           },
         };
@@ -590,6 +658,25 @@ vi.mock("../../src/config/supabase.js", () => ({
                   })),
                   error: null,
                 });
+              },
+            }),
+          }),
+        };
+      }
+
+      if (table === "audit_event") {
+        return {
+          insert: (row: Record<string, unknown>) => ({
+            select: () => ({
+              single: async () => {
+                auditSeq += 1;
+                const stored = {
+                  audit_event_id: `ffffffff-ffff-4fff-8fff-${String(auditSeq).padStart(12, "0")}`,
+                  ...row,
+                  created_at: now,
+                };
+                auditEvents.push(stored);
+                return { data: stored, error: null };
               },
             }),
           }),

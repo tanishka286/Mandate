@@ -1,8 +1,21 @@
+import type { Request, Response } from "express";
+import type { ApiSuccessResponse } from "@mandate/types";
+import { SessionsService } from "./service.js";
+import type { CreateShoppingSessionData } from "./schema.js";
+
 /**
- * Shopping session controller (Phase 3 Step 1 foundation).
- * No direct database access from controllers.
- * HTTP session routes are deferred until later Phase 3 steps.
+ * Shopping session controller — Phase 10 session start for demo/E2E.
  */
 export class SessionsController {
-  // Intentionally empty in Phase 3 Step 1
+  constructor(private readonly service = new SessionsService()) {}
+
+  create = async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user!.id;
+    const data = await this.service.createSession(userId);
+    const body: ApiSuccessResponse<CreateShoppingSessionData> = {
+      data,
+      meta: { request_id: req.requestId },
+    };
+    res.status(201).json(body);
+  };
 }

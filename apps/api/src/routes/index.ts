@@ -11,11 +11,13 @@ import { basketRouter } from "../modules/basket/index.js";
 import { checkoutRouter } from "../modules/checkout/index.js";
 import { paymentsRouter } from "../modules/payments/index.js";
 import { razorpayWebhookRouter } from "../modules/webhooks/index.js";
+import { demoRouter } from "../modules/demo/routes.js";
 import { healthHandler } from "./health.js";
 
 export const v1Router = Router();
 
 v1Router.get("/health", healthHandler);
+v1Router.use("/demo", demoRouter);
 v1Router.use("/catalog", catalogRouter);
 v1Router.use("/products", productsRouter);
 v1Router.use("/cart", cartRouter);

@@ -632,6 +632,7 @@ describe("PolicyService durable idempotency", () => {
       findById: async () => null,
       findByUserIdempotencyKey: async (userId: string, key: string) =>
         map.get(`${userId}:${key}`) ?? null,
+      findBasketSessionId: async () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01",
     } as unknown as PolicyRepository;
 
     const mandateService = {

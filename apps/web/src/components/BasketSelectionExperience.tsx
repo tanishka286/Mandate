@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import type {
   BasketQuoteData,
   BasketSelectionData,
@@ -19,116 +20,6 @@ function formatInr(minor: number): string {
   const rupees = (minor / 100).toFixed(2);
   return `₹${rupees}`;
 }
-
-const DEMO_BASKETS: SessionBasketsData = {
-  session_id: "00000000-0000-4000-8000-000000000001",
-  optimization_run_id: "00000000-0000-4000-8000-000000000002",
-  best_value: {
-    basket_id: "11111111-1111-4111-8111-111111111101",
-    optimization_run_id: "00000000-0000-4000-8000-000000000002",
-    session_id: "00000000-0000-4000-8000-000000000001",
-    user_id: "00000000-0000-4000-8000-000000000099",
-    basket_type: "BEST_VALUE",
-    status: "CURRENT",
-    gross_amount_minor: 92000,
-    discount_amount_minor: 4600,
-    final_payable_minor: 87400,
-    currency: "INR",
-    quality_summary: "Good quality across staples",
-    recommendation_reason: null,
-    explanation:
-      "Lowest practical cost while meeting quantity and pack constraints.",
-    combination_key: "demo-value",
-    state_version: 1,
-    items: [
-      {
-        basket_item_id: "21111111-1111-4111-8111-111111111101",
-        basket_id: "11111111-1111-4111-8111-111111111101",
-        requirement_id: null,
-        sku_id: "33333333-3333-4333-8333-333333333301",
-        quantity: 2,
-        unit_price_minor: 25000,
-        line_amount_minor: 50000,
-        quality_level: "GOOD",
-        evidence_refs_json: [],
-        created_at: "2026-09-05T00:00:00.000Z",
-        updated_at: "2026-09-05T00:00:00.000Z",
-      },
-      {
-        basket_item_id: "21111111-1111-4111-8111-111111111102",
-        basket_id: "11111111-1111-4111-8111-111111111101",
-        requirement_id: null,
-        sku_id: "33333333-3333-4333-8333-333333333302",
-        quantity: 1,
-        unit_price_minor: 42000,
-        line_amount_minor: 42000,
-        quality_level: "FAIR",
-        evidence_refs_json: [],
-        created_at: "2026-09-05T00:00:00.000Z",
-        updated_at: "2026-09-05T00:00:00.000Z",
-      },
-    ],
-    created_at: "2026-09-05T00:00:00.000Z",
-    updated_at: "2026-09-05T00:00:00.000Z",
-  },
-  best_quality: {
-    basket_id: "11111111-1111-4111-8111-111111111102",
-    optimization_run_id: "00000000-0000-4000-8000-000000000002",
-    session_id: "00000000-0000-4000-8000-000000000001",
-    user_id: "00000000-0000-4000-8000-000000000099",
-    basket_type: "BEST_QUALITY",
-    status: "CURRENT",
-    gross_amount_minor: 98000,
-    discount_amount_minor: 2000,
-    final_payable_minor: 96000,
-    currency: "INR",
-    quality_summary: "Higher evidence-backed quality within budget",
-    recommendation_reason: null,
-    explanation:
-      "Slightly higher cost for stronger quality evidence on key items.",
-    combination_key: "demo-quality",
-    state_version: 1,
-    items: [
-      {
-        basket_item_id: "21111111-1111-4111-8111-111111111201",
-        basket_id: "11111111-1111-4111-8111-111111111102",
-        requirement_id: null,
-        sku_id: "33333333-3333-4333-8333-333333333303",
-        quantity: 3,
-        unit_price_minor: 22000,
-        line_amount_minor: 66000,
-        quality_level: "EXCELLENT",
-        evidence_refs_json: [],
-        created_at: "2026-09-05T00:00:00.000Z",
-        updated_at: "2026-09-05T00:00:00.000Z",
-      },
-      {
-        basket_item_id: "21111111-1111-4111-8111-111111111202",
-        basket_id: "11111111-1111-4111-8111-111111111102",
-        requirement_id: null,
-        sku_id: "33333333-3333-4333-8333-333333333304",
-        quantity: 1,
-        unit_price_minor: 32000,
-        line_amount_minor: 32000,
-        quality_level: "GOOD",
-        evidence_refs_json: [],
-        created_at: "2026-09-05T00:00:00.000Z",
-        updated_at: "2026-09-05T00:00:00.000Z",
-      },
-    ],
-    created_at: "2026-09-05T00:00:00.000Z",
-    updated_at: "2026-09-05T00:00:00.000Z",
-  },
-  recommendation: {
-    recommended_basket_type: "BEST_VALUE",
-    recommended_basket_id: "11111111-1111-4111-8111-111111111101",
-    reason: "Best balance of cost and fulfillment for this goal.",
-    tradeoff_summary:
-      "Best Quality costs about ₹86 more for a clear quality uplift.",
-    user_may_select_alternative: true,
-  },
-  active_selection: null,
-};
 
 function BasketOption(props: {
   basket: BasketView;
@@ -237,32 +128,23 @@ function BasketOption(props: {
 }
 
 export function BasketSelectionExperience(props: {
-  initialData?: SessionBasketsData;
   sessionId?: string;
   token?: string;
   mandateId?: string;
 }) {
-  const [data, setData] = useState<SessionBasketsData>(
-    props.initialData ?? DEMO_BASKETS,
-  );
+  const [data, setData] = useState<SessionBasketsData | null>(null);
   const [selection, setSelection] = useState<BasketSelectionData | null>(null);
   const [quote, setQuote] = useState<BasketQuoteData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [liveMode, setLiveMode] = useState(false);
-
-  const recommendedId = data.recommendation?.recommended_basket_id ?? null;
-  const selectedId =
-    selection?.basket_id ?? data.active_selection?.basket_id ?? null;
 
   const canCallApi = useMemo(
     () => Boolean(props.sessionId && props.token),
     [props.sessionId, props.token],
   );
 
-  function loadLive() {
+  useEffect(() => {
     if (!props.sessionId || !props.token) {
-      setError("Session id and auth token are required for live baskets.");
       return;
     }
     startTransition(async () => {
@@ -270,55 +152,79 @@ export function BasketSelectionExperience(props: {
         setError(null);
         const res = await fetchSessionBaskets(props.sessionId!, props.token!);
         setData(res.data);
-        setLiveMode(true);
-        setSelection(null);
-        setQuote(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load baskets");
       }
     });
-  }
+  }, [props.sessionId, props.token]);
+
+  const recommendedId = data?.recommendation?.recommended_basket_id ?? null;
+  const selectedId =
+    selection?.basket_id ?? data?.active_selection?.basket_id ?? null;
 
   function onChoose(basket: BasketView) {
+    if (!props.sessionId || !props.token) {
+      setError("Authoritative session context is required.");
+      return;
+    }
     startTransition(async () => {
       try {
         setError(null);
         setQuote(null);
-
-        if (liveMode && props.sessionId && props.token) {
-          const selected = await selectBasket(
-            props.sessionId,
-            basket.basket_id,
-            props.token,
-          );
-          setSelection(selected.data);
-          const quoted = await createBasketQuote(
-            basket.basket_id,
-            props.token,
-          );
-          setQuote(quoted.data);
-          return;
-        }
-
-        // Demo path: local preference only — never pretends to authorize.
-        setSelection({
-          selection_id: "demo-selection",
-          session_id: data.session_id,
-          basket_id: basket.basket_id,
-          selection_source: "USER",
-          status: "SELECTED",
-          selected_at: new Date().toISOString(),
-          superseded_at: null,
-          created_at: new Date().toISOString(),
-          order_created: false,
-          payment_created: false,
-          policy_decision: null,
-        });
-        setQuote(null);
+        const selected = await selectBasket(
+          props.sessionId!,
+          basket.basket_id,
+          props.token!,
+        );
+        setSelection(selected.data);
+        const quoted = await createBasketQuote(basket.basket_id, props.token!);
+        setQuote(quoted.data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Selection failed");
       }
     });
+  }
+
+  if (!canCallApi) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-16">
+        <h1 className="text-3xl font-semibold tracking-tight">
+          Authoritative session required
+        </h1>
+        <p className="text-slate-300">
+          Basket selection and checkout require a real shopping session created by
+          the backend. Demo baskets are not shown here because financial amounts
+          must come from server quotes only.
+        </p>
+        <Link
+          href="/"
+          className="inline-flex w-fit rounded-md bg-[var(--mandate-accent)] px-4 py-2.5 text-sm font-medium text-white"
+        >
+          Start a new shopping session
+        </Link>
+      </div>
+    );
+  }
+
+  if (!data && !error) {
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-16 text-slate-300">
+        Loading authoritative session baskets…
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-16">
+        <p className="text-red-300" role="alert">
+          {error ?? "Failed to load session baskets."}
+        </p>
+        <Link href="/" className="mt-4 inline-block text-[var(--mandate-accent)]">
+          Return home
+        </Link>
+      </div>
+    );
   }
 
   return (
@@ -331,6 +237,9 @@ export function BasketSelectionExperience(props: {
         <p className="max-w-2xl text-slate-300">
           Choose Best Value or Best Quality. The recommendation is guidance
           only — payment still requires a fresh server quote and policy ALLOW.
+        </p>
+        <p className="text-xs text-slate-500">
+          Live API session {data.session_id}
         </p>
       </header>
 
@@ -346,10 +255,6 @@ export function BasketSelectionExperience(props: {
               {data.recommendation.tradeoff_summary}
             </p>
           ) : null}
-          <p className="mt-3 text-xs uppercase tracking-wide text-slate-500">
-            You can still choose the alternative · recommendation never disables
-            a basket
-          </p>
         </section>
       ) : null}
 
@@ -413,21 +318,18 @@ export function BasketSelectionExperience(props: {
               </dd>
             </div>
           </dl>
-          <p className="text-xs text-slate-500">
-            Policy must evaluate this quote_version before checkout.
-          </p>
-          {canCallApi && props.mandateId && selection ? (
+          {props.mandateId && selection ? (
             <CheckoutPaymentPanel
               token={props.token!}
               mandateId={props.mandateId}
               selection={selection}
               quote={quote}
             />
-          ) : canCallApi && !props.mandateId ? (
+          ) : (
             <p className="text-xs text-amber-300">
-              Pass mandateId (query param or prop) to enable Test Mode checkout.
+              mandateId is required to enable Test Mode checkout.
             </p>
-          ) : null}
+          )}
         </section>
       ) : null}
 
@@ -437,27 +339,9 @@ export function BasketSelectionExperience(props: {
         </p>
       ) : null}
 
-      {canCallApi && props.sessionId && props.token ? (
+      {props.sessionId && props.token ? (
         <AuditTrailPanel sessionId={props.sessionId} token={props.token} />
       ) : null}
-
-      <footer className="flex flex-wrap items-center gap-3 border-t border-white/10 pt-6 text-sm text-slate-400">
-        <span>{liveMode ? "Live API session" : "Demo baskets (local)"}</span>
-        {canCallApi ? (
-          <button
-            type="button"
-            onClick={loadLive}
-            disabled={pending}
-            className="rounded-md bg-white/10 px-3 py-1.5 text-white hover:bg-white/15"
-          >
-            Load live session baskets
-          </button>
-        ) : (
-          <span>
-            Pass sessionId + token props to enable live API selection and quote.
-          </span>
-        )}
-      </footer>
     </div>
   );
 }

@@ -56,3 +56,15 @@ export const shoppingSessionSchema = z
   });
 
 export type ShoppingSession = z.infer<typeof shoppingSessionSchema>;
+
+/** Doc 08 create-session response data. */
+export const createShoppingSessionDataSchema = z
+  .object({
+    session_id: sessionIdSchema,
+    status: z.literal("ACTIVE"),
+  })
+  .strict();
+
+export type CreateShoppingSessionData = z.infer<
+  typeof createShoppingSessionDataSchema
+>;

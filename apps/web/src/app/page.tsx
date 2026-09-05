@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { APP_NAME } from "@mandate/config";
+import { DemoStartForm } from "@/components/DemoStartForm";
 
 /**
- * Foundation landing — links into Phase 7 basket selection.
+ * Foundation landing — starts an authoritative backend shopping session.
  */
 export default function HomePage() {
   return (
@@ -19,12 +19,7 @@ export default function HomePage() {
         AI reasons → User chooses → Backend validates → Policy authorizes →
         Razorpay executes → Audit records
       </p>
-      <Link
-        href="/select"
-        className="mt-4 inline-flex w-fit items-center rounded-md bg-[var(--mandate-accent)] px-4 py-2.5 text-sm font-medium text-white transition hover:brightness-110"
-      >
-        Choose Best Value or Best Quality
-      </Link>
+      <DemoStartForm />
     </main>
   );
 }

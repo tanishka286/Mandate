@@ -321,8 +321,6 @@ export class AgentOrchestrator {
             {
               voucher_basket: request.incentives.basket_context,
               loyalty_basket: request.incentives.basket_context,
-              vouchers: request.incentives.vouchers ?? [],
-              loyalty_rewards: request.incentives.loyalty_rewards ?? [],
             },
             this.deps.context,
           );

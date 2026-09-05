@@ -39,6 +39,35 @@ export interface VerifyPaymentResult {
   verified_at: string;
 }
 
+export interface DemoTokenData {
+  token: string;
+  user_id: string;
+  mandate_id: string;
+}
+
+export interface CreateSessionData {
+  session_id: string;
+  status: "ACTIVE";
+}
+
+export interface CreateIntentData {
+  intent_id: string;
+  session_id: string;
+  mandate_id: string;
+  status: "CREATED";
+}
+
+export interface RunPlanData {
+  session_id: string;
+  intent_id: string;
+  outcome: "COMPLETED" | "FAILED" | "CLARIFICATION_REQUIRED";
+  optimization_run_id: string | null;
+  best_value_basket_id: string | null;
+  best_quality_basket_id: string | null;
+  recommended_basket_type: "BEST_VALUE" | "BEST_QUALITY" | null;
+  catalog_research_skipped: boolean;
+}
+
 export interface ApiErrorBody {
   error?: {
     code?: string;
@@ -143,6 +172,7 @@ export async function createBasketQuote(
 
 export async function evaluatePolicy(
   token: string,
+  idempotencyKey: string,
   input: {
     mandate_id: string;
     basket_id: string;
@@ -151,7 +181,7 @@ export async function evaluatePolicy(
 ): Promise<ApiSuccessResponse<PolicyEvaluateAllowData>> {
   const res = await fetch(`${apiConfig.baseUrl}/policy/evaluate`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(token, { "Idempotency-Key": idempotencyKey }),
     body: JSON.stringify(input),
   });
   if (!res.ok) {
@@ -214,4 +244,71 @@ export async function fetchSessionAudit(
     throw await parseApiError(res);
   }
   return (await res.json()) as ApiSuccessResponse<SessionAuditTrailData>;
+}
+
+export async function fetchDemoToken(): Promise<
+  ApiSuccessResponse<DemoTokenData>
+> {
+  const res = await fetch(`${apiConfig.baseUrl}/demo/token`, {
+    method: "POST",
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw await parseApiError(res);
+  }
+  return (await res.json()) as ApiSuccessResponse<DemoTokenData>;
+}
+
+export async function createShoppingSession(
+  token: string,
+): Promise<ApiSuccessResponse<CreateSessionData>> {
+  const res = await fetch(`${apiConfig.baseUrl}/sessions`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res);
+  }
+  return (await res.json()) as ApiSuccessResponse<CreateSessionData>;
+}
+
+export async function createShoppingIntent(
+  sessionId: string,
+  token: string,
+  body: {
+    goal_text: string;
+    budget_minor: number | null;
+    category: string;
+    quality_preference: string | null;
+    constraints: unknown[];
+    mandate_id: string;
+  },
+): Promise<ApiSuccessResponse<CreateIntentData>> {
+  const res = await fetch(`${apiConfig.baseUrl}/sessions/${sessionId}/intents`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res);
+  }
+  return (await res.json()) as ApiSuccessResponse<CreateIntentData>;
+}
+
+export async function runSessionPlan(
+  sessionId: string,
+  token: string,
+  body: { intent_id: string },
+): Promise<ApiSuccessResponse<RunPlanData>> {
+  const res = await fetch(`${apiConfig.baseUrl}/sessions/${sessionId}/plan`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res);
+  }
+  return (await res.json()) as ApiSuccessResponse<RunPlanData>;
 }
