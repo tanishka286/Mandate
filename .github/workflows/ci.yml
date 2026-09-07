@@ -30,17 +30,24 @@ jobs:
         run: npm run typecheck
 
       - name: Test
-        run: npm run test
+        run: |
+          npm run build:packages
+          npm run test -w @mandate/api -- --exclude 'tests/integration/**/*hosted*.test.ts'
+          npm run test -w @mandate/web
+          npm run test -w @mandate/config
+          npm run test -w @mandate/types
         env:
           NODE_ENV: test
-          # Mirror local .env — add these as GitHub repository secrets (Settings → Secrets → Actions).
-          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
-          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
-          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          CI: true
+          # Harmless CI placeholders — satisfy module init; not production credentials.
+          PLANNING_REQUIREMENT_MODE: deterministic
+          RAZORPAY_KEY_ID: rzp_test_ci_placeholder
+          RAZORPAY_KEY_SECRET: ci_test_razorpay_secret_placeholder
+          RAZORPAY_WEBHOOK_SECRET: ci_test_webhook_secret_placeholder
           RAZORPAY_ENV: test
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SUPABASE_URL: https://example.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ci-test-service-role-key-not-for-production
+          JWT_SECRET: ci-test-jwt-secret-not-for-production
 
       - name: Build
         run: npm run build
